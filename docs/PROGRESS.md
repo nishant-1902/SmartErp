@@ -27,6 +27,7 @@
 - Local `frontend/node_modules/` — installed dependencies, ignored by Git.
 - `frontend/dist/` — production build output, ignored by Git.
 - `docs/requirements.md` — confirmed functional requirements grouped A–J, non-functional requirements, role definitions, permission matrix, business rules, PO/sales transition tables, and acceptance criteria.
+- `docs/mongodb-local-setup.md` — Windows installation, single-node replica-set, local user, key-file, connection, service, backup/restore, and debugging instructions.
 
 ## Files modified
 
@@ -40,6 +41,8 @@
 - `frontend/index.html` — changed the document title to SmartERP.
 - `frontend/.gitkeep` — removed because the frontend now contains the app scaffold.
 - `docs/requirements.md` — replaced the TODO placeholder with the requirements and authorization/workflow baseline; recorded owner confirmation.
+- `backend/.env.example` — changed `MONGO_URI` to the `smarterp_app` replica-set URI shape with a URL-encoded password placeholder.
+- `docs/PROGRESS.md` — recorded the local MongoDB setup work and actual validation results.
 
 ## Dependencies installed
 
@@ -110,7 +113,7 @@
 - The backend has no API endpoints, MongoDB connection manager, shared exception envelope handler, authentication, business logic, or application tests yet.
 - Authentication and permission defaults are empty intentionally for this skeleton; protected API routes and deny-by-default authorization must be implemented in Phase 3 before business endpoints are exposed.
 - `backend/.env.example` contains placeholders only. Copy it to `.env` and replace secret values before local development; no actual secrets are committed.
-- A replica-set MongoDB URI is documented, but MongoDB has not been installed or configured and the backend does not connect to it yet.
+- MongoDB Community Server 9.0.4 is installed and its Windows service is running, but its current config is standalone (`bindIp: 127.0.0.1`; replica-set and security sections are not enabled). `mongosh` and MongoDB Database Tools are not on PATH, and the backend does not connect to MongoDB yet.
 - `gunicorn` was not installed on Windows because of its platform marker; use Waitress locally on Windows.
 - The default Vite port 5173 was denied by the environment with `EACCES`; port 4173 worked. This appears specific to the current environment, not an app build failure.
 - Vite's generated `App.css`, hero image, and React/Vite logo assets are unused by the current Home screen and can be removed or replaced when the visual design phase begins.
@@ -119,4 +122,55 @@
 
 ## Next step
 
-- Phase 2, step 1: configure local MongoDB as a single-node replica set for transaction support. The approved requirements are ready for implementation after the user requests that step.
+- Complete the Administrator-only local MongoDB conversion using `docs/mongodb-local-setup.md` (install `mongosh` and Database Tools, enable and initialize `rs0`, create local passwords, then enable key-file authentication). Do not begin backend MongoDB integration until that local setup is complete and the user requests the next step.
+
+## 2026-10-28 — Local MongoDB setup instructions
+
+### Files created
+
+- `docs/mongodb-local-setup.md` — full Windows setup guide, including installation links, the requested ordered replica-set procedure, scoped users, secure key-file generation, URI, service control, backup/restore, transaction limits, deployment choices, data flow, and troubleshooting.
+
+### Files modified
+
+- `backend/.env.example` — now shows the scoped application-user URI with a password placeholder only.
+- `docs/PROGRESS.md` — recorded the setup status, commands, validation, and remaining local tasks.
+
+### Dependencies installed
+
+- None. MongoDB Server was already installed; no software, packages, or test dependencies were installed during this task.
+
+### Commands run and observed
+
+- `Get-Service MongoDB` — reported `Status Running`, `Name MongoDB`, `DisplayName MongoDB Server (MongoDB)`.
+- `Get-CimInstance Win32_Service -Filter "Name='MongoDB'"` — reported service account `NT AUTHORITY\NetworkService` and executable `C:\Program Files\MongoDB\Server\9.0\bin\mongod.exe`.
+- `& 'C:\Program Files\MongoDB\Server\9.0\bin\mongod.exe' --version` — reported `db version v9.0.4` and `exit=0`.
+- `mongod --version`, `mongosh --version`, and `mongodump --version` availability checks — only the server executable exists in the identified server `bin` folder; `mongod` is not on PATH and `mongosh`/`mongodump` are not installed or on PATH.
+- `.\backend\venv\Scripts\python.exe .\backend\manage.py check` — `System check identified no issues (0 silenced).`
+- From `frontend\`, `npm test` — Vitest passed: 1 test file and 1 test passed.
+- `.\backend\venv\Scripts\python.exe -m pytest` — collected 0 items and returned exit code 5; no backend tests exist yet.
+- `git diff --check` — passed.
+
+### Features completed
+
+- Documented how to install the four MongoDB components and verify the three command-line tools.
+- Documented the exact ordered standalone-to-single-node-replica-set procedure, including `localhost:27017`, scoped database roles, the 756-byte cryptographic PowerShell key-file command, and why the key file is required with authorization.
+- Documented SmartERP's MongoDB URI format without adding real credentials to the repository.
+- Documented service management, database backup/restore, transactions, topology trade-offs, request/data flow, and debugging steps.
+
+### Tests passed
+
+- Frontend tests: 1 passed.
+- Django system check: passed.
+- `git diff --check`: passed.
+- MongoDB server binary version check: passed for the installed v9.0.4 executable.
+
+### Known problems
+
+- The running MongoDB service is still configured as standalone; no `mongod.cfg` changes, replica-set initialization, database users, key file, or authentication changes were applied.
+- `mongosh` and MongoDB Database Tools (`mongodump`/`mongorestore`) are unavailable, so replica-set status, user logins, and backup/restore could not be run.
+- Local MongoDB changes require Administrator access. Real database passwords must be entered locally and must not be committed.
+- Backend pytest has no collected tests. The backend still has no PyMongo connection manager or database integration.
+
+### Next step
+
+- Follow `docs/mongodb-local-setup.md` locally with Administrator access, install the missing shell/tools, and finish the replica-set and authentication steps. Stop there; backend integration is a separate next step and has not been started.
