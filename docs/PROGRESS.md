@@ -26,6 +26,7 @@
 - `frontend/src/assets/.gitkeep`, `frontend/src/components/.gitkeep`, `frontend/src/layouts/.gitkeep`, `frontend/src/context/.gitkeep`, `frontend/src/hooks/.gitkeep`, and `frontend/src/utils/.gitkeep` — retain the requested empty source folders in Git.
 - Local `frontend/node_modules/` — installed dependencies, ignored by Git.
 - `frontend/dist/` — production build output, ignored by Git.
+- `docs/requirements.md` — confirmed functional requirements grouped A–J, non-functional requirements, role definitions, permission matrix, business rules, PO/sales transition tables, and acceptance criteria.
 
 ## Files modified
 
@@ -38,6 +39,7 @@
 - `frontend/src/index.css` — replaced Vite demo styles with minimal app-wide styling.
 - `frontend/index.html` — changed the document title to SmartERP.
 - `frontend/.gitkeep` — removed because the frontend now contains the app scaffold.
+- `docs/requirements.md` — replaced the TODO placeholder with the requirements and authorization/workflow baseline; recorded owner confirmation.
 
 ## Dependencies installed
 
@@ -73,6 +75,9 @@
 - From `frontend/`: `npm run lint` passed.
 - `npm run dev -- --host 127.0.0.1` could not bind default port 5173 in this environment (`EACCES`). Retried with `npm run dev -- --host 127.0.0.1 --port 4173 --strictPort`; Vite reported ready and the browser rendered the SmartERP welcome screen at `http://127.0.0.1:4173/`. The temporary process was stopped.
 - Initial `npm test` and `npm run build` from the repository root failed because no root `package.json` exists; rerunning each from `frontend/` passed.
+- Validated `docs/requirements.md` for all A–J modules, non-functional requirements, roles, permissions, business rules, both transition tables, acceptance criteria, and owner-confirmation questions.
+- Owner confirmed the complete permission matrix and workflow proposal on 2026-10-28; the requirements document now records these as approved policy.
+- No dependencies or application code changed for this documentation step; no test suite is defined for requirements documentation.
 - No `.env` file or real secret was created. Validation secrets were set only in temporary PowerShell process environment variables.
 
 ## Features completed
@@ -88,6 +93,8 @@
 - React Bootstrap is installed for later accessible Bootstrap-based UI components such as Modal, Offcanvas, and Toast. It provides React-managed component behavior and accessibility attributes without requiring Bootstrap's separate JavaScript bundle or manual DOM scripting.
 - Vitest is configured with jsdom and Testing Library; a Home-screen smoke test passes.
 - Axios uses `import.meta.env.VITE_API_BASE_URL`, `withCredentials: true`, and JSON headers; request/response interceptors are intentionally deferred.
+- Drafted the functional and non-functional requirements, a proposed role permission matrix, separation-of-duties rule, purchase-order and sales-order state machines, stock timing, and project acceptance criteria.
+- Recorded owner confirmation of permission grants, report/audit access, fulfilment role, PO approval exception, and sales state transitions. Implementation remains pending.
 
 ## Tests passed
 
@@ -108,7 +115,8 @@
 - The default Vite port 5173 was denied by the environment with `EACCES`; port 4173 worked. This appears specific to the current environment, not an app build failure.
 - Vite's generated `App.css`, hero image, and React/Vite logo assets are unused by the current Home screen and can be removed or replaced when the visual design phase begins.
 - Frontend login, auth state, API calls, business screens, and Axios interceptors are not implemented yet.
+- The permission matrix and workflow policies are approved in `docs/requirements.md` but are not implemented yet.
 
 ## Next step
 
-- Phase 2, step 1: configure local MongoDB as a single-node replica set for transaction support. Do not begin it until requested.
+- Phase 2, step 1: configure local MongoDB as a single-node replica set for transaction support. The approved requirements are ready for implementation after the user requests that step.
