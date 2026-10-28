@@ -30,6 +30,7 @@ class FakeDatabase:
         self.collections = {}
         self.created_collections = []
         self.commands = []
+        self.options = {}
 
     def list_collection_names(self):
         return list(self.collections)
@@ -39,7 +40,18 @@ class FakeDatabase:
             raise CollectionInvalid(name)
         self.collections[name] = FakeCollection()
         self.created_collections.append((name, options))
+        self.options[name] = {
+            "validator": options["validator"],
+            "validationLevel": options["validationLevel"],
+            "validationAction": options["validationAction"],
+        }
         return self.collections[name]
+
+    def list_collections(self):
+        return [
+            {"name": name, "options": options}
+            for name, options in self.options.items()
+        ]
 
     def command(self, command):
         self.commands.append(command)
@@ -69,7 +81,7 @@ def test_initialize_database_creates_collections_validators_and_indexes():
     )
 
 
-def test_initialize_database_is_repeatable_and_updates_existing_validators():
+def test_initialize_database_is_repeatable_without_modifying_current_validators():
     database = FakeDatabase()
     output = []
     initialize_database(database, output.append)
@@ -84,12 +96,21 @@ def test_initialize_database_is_repeatable_and_updates_existing_validators():
         len(collection.created_indexes) for collection in database.collections.values()
     )
     assert second_index_count == first_index_count * 2
-    assert len(database.commands) == len(COLLECTIONS)
-    assert all(command["validationLevel"] == "strict" for command in database.commands)
-    assert any(line.startswith("Updated validator: users") for line in output)
+    assert not database.commands
+    assert any(line.startswith("Validator already current: users") for line in output)
     assert any(
         line.startswith("Already present: users.uq_users_email") for line in output
     )
+
+
+def test_initialize_database_updates_a_stale_validator():
+    database = FakeDatabase()
+    initialize_database(database, lambda _: None)
+    database.options["users"]["validator"] = {}
+
+    initialize_database(database, lambda _: None)
+
+    assert any(command.get("collMod") == "users" for command in database.commands)
 
 
 @override_settings(MONGO_URI="", MONGO_DB_NAME="smarterp")

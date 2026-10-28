@@ -774,8 +774,6 @@ COLLECTIONS: dict[str, CollectionDefinition] = {
                 "updated_at": {"bsonType": "date"},
             },
         ),
-        indexes=(
-
-        ),
+        indexes=(),
     ),
 }

@@ -18,6 +18,11 @@ def initialize_database(
 ) -> None:
     """Create missing collections and idempotently ensure validators and indexes."""
     existing_collections = set(database.list_collection_names())
+    collection_options = {
+        info["name"]: info.get("options", {})
+        for info in database.list_collections()
+        if info["name"] in COLLECTIONS
+    }
 
     for collection_name, definition in COLLECTIONS.items():
         if collection_name not in existing_collections:
@@ -35,15 +40,24 @@ def initialize_database(
                 write(f"Collection already exists: {collection_name}")
             existing_collections.add(collection_name)
         else:
-            database.command(
-                {
-                    "collMod": collection_name,
-                    "validator": definition.validator,
-                    "validationLevel": "strict",
-                    "validationAction": "error",
-                }
+            options = collection_options.get(collection_name, {})
+            validator_is_current = (
+                options.get("validator") == definition.validator
+                and options.get("validationLevel", "strict") == "strict"
+                and options.get("validationAction", "error") == "error"
             )
-            write(f"Updated validator: {collection_name}")
+            if validator_is_current:
+                write(f"Validator already current: {collection_name}")
+            else:
+                database.command(
+                    {
+                        "collMod": collection_name,
+                        "validator": definition.validator,
+                        "validationLevel": "strict",
+                        "validationAction": "error",
+                    }
+                )
+                write(f"Updated validator: {collection_name}")
 
         collection = database[collection_name]
         existing_indexes = collection.index_information()

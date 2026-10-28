@@ -35,6 +35,8 @@ ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
 
 MONGO_URI = os.getenv("MONGO_URI", "")
 MONGO_DB_NAME = os.getenv("MONGO_DB_NAME", "smarterp")
+MONGO_TEST_URI = os.getenv("MONGO_TEST_URI", "")
+MONGO_TEST_DB_NAME = os.getenv("MONGO_TEST_DB_NAME", "smarterp_test")
 
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "")
 JWT_ISSUER = os.getenv("JWT_ISSUER", "smarterp-api")

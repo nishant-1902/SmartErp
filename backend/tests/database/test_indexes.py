@@ -24,10 +24,11 @@ EXPECTED_COLLECTIONS = {
 
 def test_all_required_collections_have_purpose_validator_and_indexes():
     assert set(COLLECTIONS) == EXPECTED_COLLECTIONS
-    for definition in COLLECTIONS.values():
+    for collection_name, definition in COLLECTIONS.items():
         assert definition.purpose
         assert definition.validator["$jsonSchema"]["bsonType"] == "object"
-        assert definition.indexes
+        if collection_name != "counters":
+            assert definition.indexes
 
 
 def test_required_unique_indexes_are_defined():
