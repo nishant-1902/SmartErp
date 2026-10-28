@@ -1,0 +1,18 @@
+# Django web framework; 5.2 is the current LTS series.
+Django==5.2.18
+# JSON API toolkit; PyPI classifies this release for Django 5.2.
+djangorestframework==3.18.3
+# Official MongoDB Python driver; the only database access layer.
+pymongo==4.19.0
+# JWT encoding and verification for the planned API authentication.
+PyJWT==2.15.1
+# Loads local environment variables from a .env file.
+python-dotenv==1.2.4
+# Adds configurable CORS middleware and settings.
+django-cors-headers==4.9.0
+# Provides Argon2 password hashing support for Django's standalone hashers.
+argon2-cffi==25.1.0
+# Production-capable WSGI server that runs on Windows.
+waitress==3.0.2
+# Production WSGI server for non-Windows platforms only.
+gunicorn==26.2.0; sys_platform != 'win32'

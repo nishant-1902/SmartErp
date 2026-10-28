@@ -1,0 +1,8 @@
+-r requirements.txt
+
+# Test runner.
+pytest==9.2.0
+# Integrates pytest with Django settings and test helpers.
+pytest-django==4.14.0
+# Adds coverage reporting to pytest.
+pytest-cov==7.1.0
