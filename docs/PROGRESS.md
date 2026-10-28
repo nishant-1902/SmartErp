@@ -28,6 +28,8 @@
 - `frontend/dist/` — production build output, ignored by Git.
 - `docs/requirements.md` — confirmed functional requirements grouped A–J, non-functional requirements, role definitions, permission matrix, business rules, PO/sales transition tables, and acceptance criteria.
 - `docs/mongodb-local-setup.md` — Windows installation, single-node replica-set, local user, key-file, connection, service, backup/restore, and debugging instructions.
+- `backend/common/responses.py`, `exceptions.py`, `object_id.py`, `sanitize.py`, `serialization.py`, `money.py`, `pagination.py`, and `time.py` — shared API response/error, MongoDB input, document serialization, money, pagination, and UTC helpers.
+- `backend/tests/common/test_responses.py`, `test_exceptions.py`, `test_object_id.py`, `test_sanitize.py`, `test_serialization.py`, `test_money.py`, `test_pagination.py`, and `test_time.py` — unit tests for the shared helpers.
 
 ## Files modified
 
@@ -43,6 +45,7 @@
 - `docs/requirements.md` — replaced the TODO placeholder with the requirements and authorization/workflow baseline; recorded owner confirmation.
 - `backend/.env.example` — changed `MONGO_URI` to the `smarterp_app` replica-set URI shape with a URL-encoded password placeholder.
 - `docs/PROGRESS.md` — recorded the local MongoDB setup work and actual validation results.
+- `backend/config/settings.py` — configured DRF to use the common API exception handler.
 
 ## Dependencies installed
 
@@ -174,3 +177,61 @@
 ### Next step
 
 - Follow `docs/mongodb-local-setup.md` locally with Administrator access, install the missing shell/tools, and finish the replica-set and authentication steps. Stop there; backend integration is a separate next step and has not been started.
+
+## 2026-10-28 — Shared backend common helpers
+
+### Files created
+
+- `backend/common/responses.py` — success/error DRF response envelopes.
+- `backend/common/exceptions.py` — application exception types and the shared DRF exception handler.
+- `backend/common/object_id.py` — ObjectId validation and parsing.
+- `backend/common/sanitize.py` — recursive unsafe-key rejection and literal regex escaping.
+- `backend/common/serialization.py` — nested BSON document conversion to JSON-safe values.
+- `backend/common/money.py` — exact Decimal calculations and BSON Decimal128 conversion.
+- `backend/common/pagination.py` — validated page/size parsing, whitelisted sorting, offsets, and pagination metadata.
+- `backend/common/time.py` — timezone-aware UTC clock helper.
+- `backend/tests/common/test_responses.py`, `test_exceptions.py`, `test_object_id.py`, `test_sanitize.py`, `test_serialization.py`, `test_money.py`, `test_pagination.py`, and `test_time.py` — focused tests covering each helper module, including `{"$ne": null}`, decimal precision and rounding, and tax after discounts.
+
+### Files modified
+
+- `backend/config/settings.py` — wired DRF's `EXCEPTION_HANDLER` to `common.exceptions.api_exception_handler`.
+- `docs/PROGRESS.md` — recorded this implementation, validation, and remaining work.
+
+### Dependencies installed
+
+- None. Existing backend dependencies already include Django REST Framework, PyMongo/BSON, and pytest.
+
+### Commands run and observed
+
+- From `backend\`, `.\venv\Scripts\python.exe -m pytest -q` — `60 passed in 0.88s`.
+- `.\backend\venv\Scripts\python.exe .\backend\manage.py check` — `System check identified no issues (0 silenced).`
+- `git diff --check` — passed.
+- Pylance syntax checks for all eight new helper modules and all eight new test modules — each reported `No syntax errors found`.
+- Pylance workspace diagnostics reported unresolved Django/DRF/PyMongo/pytest imports in its analysis environment; runtime tests and Django checks pass using `backend\venv`.
+
+### Features completed
+
+- Standard success and error envelopes are available as shared DRF response helpers.
+- Custom application errors, DRF validation errors, Mongo duplicate-key errors, and unknown exceptions are returned in the standard envelope; unknown exceptions are logged server-side and receive a generic 500 response.
+- ObjectIds are validated before conversion; unsafe Mongo key patterns are rejected recursively; regex input can be escaped literally.
+- Mongo documents recursively convert ObjectIds, UTC-normalized datetimes, and Decimal128/Decimal values into JSON-safe values.
+- Monetary helpers reject floats, use Decimal arithmetic, round with `ROUND_HALF_UP`, and support discounted-price tax calculations.
+- Pagination defaults to page 1 and page size 20, rejects sizes above 100 and invalid sort fields, and builds the requested metadata shape.
+- UTC timestamps are timezone-aware.
+
+### Tests passed
+
+- Backend unit tests: 60 passed.
+- Django system check: passed.
+- Pylance syntax checks: all 16 new Python source/test files passed.
+- `git diff --check`: passed.
+
+### Known problems
+
+- The Pylance editor analysis environment currently reports missing third-party imports even though the backend virtual environment imports them and tests pass. Select/configure the backend virtual environment in the editor if those diagnostics persist.
+- MongoDB is still configured as a standalone service; local replica-set conversion and database authentication remain pending per the prior setup step.
+- API endpoints, business repositories/services, authentication, and actual MongoDB integration are not implemented yet.
+
+### Next step
+
+- Complete the previously documented local MongoDB replica-set setup. These common helpers do not themselves connect to MongoDB or implement application endpoints.

@@ -96,8 +96,7 @@ REST_FRAMEWORK = {
     ],
     "UNAUTHENTICATED_USER": None,
     "UNAUTHENTICATED_TOKEN": None,
-    # Replace with the shared envelope handler when common exceptions are added.
-    "EXCEPTION_HANDLER": "rest_framework.views.exception_handler",
+    "EXCEPTION_HANDLER": "common.exceptions.api_exception_handler",
     # Authentication and deny-by-default permissions are added in Phase 3.
     "DEFAULT_AUTHENTICATION_CLASSES": [],
     "DEFAULT_PERMISSION_CLASSES": [],
