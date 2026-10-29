@@ -11,12 +11,19 @@ from django.core.exceptions import ImproperlyConfigured
 from pymongo.database import Database
 from rest_framework.exceptions import APIException
 
+from accounts.passwords import hash_password, verify_password
 from accounts.repository import (
+    clear_login_attempts,
     create_refresh_token as insert_refresh_token,
     delete_refresh_token,
     find_refresh_token_by_hash,
+    find_user_by_email,
+    find_user_by_id,
+    get_login_attempt,
     revoke_refresh_token_family,
     rotate_refresh_token_record,
+    upsert_login_attempt,
+    write_audit_log,
 )
 from common.object_id import parse_object_id
 from common.time import utc_now
@@ -88,6 +95,251 @@ def create_refresh_token(
         now=created_at,
     )
     return raw_token
+
+
+def write_security_audit(
+    database: Database[Any],
+    *,
+    actor_id: ObjectId | str | None,
+    action: str,
+    resource: str,
+    resource_id: str | ObjectId | None,
+    outcome: str,
+    ip: str | None = None,
+    user_agent: str | None = None,
+    now: datetime | None = None,
+) -> None:
+    """Record a security-sensitive event for later auditing."""
+    write_audit_log(
+        database,
+        actor_id=actor_id,
+        action=action,
+        resource=resource,
+        resource_id=resource_id,
+        outcome=outcome,
+        ip=ip,
+        user_agent=user_agent,
+        now=now,
+    )
+
+
+def get_public_user(user: dict[str, Any]) -> dict[str, Any]:
+    """Return a user-like object with secret fields removed."""
+    public = dict(user)
+    public.pop("password_hash", None)
+    public.pop("password_reset_token_hash", None)
+    public.pop("password_reset_expires_at", None)
+    public["id"] = str(public["_id"])
+    public["_id"] = str(public["_id"])
+    return public
+
+
+def get_login_retry_after(database: Database[Any], email: str, client_ip: str) -> int:
+    """Return the remaining lock duration in seconds for a locked email/IP pair."""
+    record = get_login_attempt(database, email, client_ip)
+    if record is None:
+        return 0
+    now = utc_now()
+    locked_until = record.get("locked_until")
+    if locked_until is None:
+        return 0
+    remaining = (locked_until - now).total_seconds()
+    return max(1, int(remaining))
+
+
+def check_login_lockout(database: Database[Any], email: str, client_ip: str) -> tuple[bool, int]:
+    """Return whether a login is temporarily blocked and the remaining retry time."""
+    record = get_login_attempt(database, email, client_ip)
+    if record is None:
+        return False, 0
+    now = utc_now()
+    locked_until = record.get("locked_until")
+    if isinstance(locked_until, datetime) and locked_until > now:
+        return True, get_login_retry_after(database, email, client_ip)
+    if record.get("expires_at") and record.get("expires_at") <= now:
+        database["login_attempts"].delete_one({
+            "email": record.get("email"),
+            "client_ip": client_ip,
+        })
+    return False, 0
+
+
+def record_failed_login(
+    database: Database[Any],
+    *,
+    email: str,
+    client_ip: str,
+    user: dict[str, Any] | None,
+    ip: str | None,
+    user_agent: str | None,
+    now: datetime | None = None,
+) -> tuple[bool, int]:
+    """Increment the failed-login counter and lock after the fifth failure."""
+    current_time = _as_utc(now or utc_now())
+    record = get_login_attempt(database, email, client_ip)
+    if record is not None and record.get("expires_at") and _as_utc(record["expires_at"]) <= current_time:
+        record = None
+    if record is None:
+        record = {
+            "email": email,
+            "client_ip": client_ip,
+            "failed_count": 0,
+            "window_started_at": current_time,
+            "expires_at": current_time + timedelta(minutes=15),
+            "locked_until": None,
+        }
+    failed_count = int(record.get("failed_count", 0)) + 1
+    if failed_count >= 5:
+        locked_until = current_time + timedelta(minutes=15)
+        upsert_login_attempt(
+            database,
+            email,
+            client_ip,
+            failed_count=failed_count,
+            window_started_at=current_time,
+            expires_at=locked_until + timedelta(minutes=15),
+            locked_until=locked_until,
+        )
+        write_security_audit(
+            database,
+            actor_id=user.get("_id") if user else None,
+            action="login_failed",
+            resource="user",
+            resource_id=user.get("_id") if user else email,
+            outcome="rate_limited",
+            ip=ip,
+            user_agent=user_agent,
+            now=current_time,
+        )
+        return True, 900
+    upsert_login_attempt(
+        database,
+        email,
+        client_ip,
+        failed_count=failed_count,
+        window_started_at=record.get("window_started_at", current_time),
+        expires_at=current_time + timedelta(minutes=15),
+        locked_until=None,
+    )
+    return False, 0
+
+
+def record_successful_login(
+    database: Database[Any],
+    *,
+    user: dict[str, Any],
+    ip: str | None,
+    user_agent: str | None,
+    now: datetime | None = None,
+) -> None:
+    """Clear failed attempts and log a successful sign-in."""
+    clear_login_attempts(database, user["email"], ip or "unknown")
+    write_security_audit(
+        database,
+        actor_id=user.get("_id"),
+        action="login_success",
+        resource="user",
+        resource_id=user.get("_id"),
+        outcome="success",
+        ip=ip,
+        user_agent=user_agent,
+        now=now or utc_now(),
+    )
+
+
+def request_password_reset(
+    database: Database[Any],
+    *,
+    email: str,
+    ip: str | None = None,
+    user_agent: str | None = None,
+    now: datetime | None = None,
+) -> str | None:
+    """Issue a single-use password-reset token for the matching email account."""
+    user = find_user_by_email(database, email)
+    if user is None:
+        return None
+    current_time = _as_utc(now or utc_now())
+    token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    database["users"].update_one(
+        {"_id": user["_id"]},
+        {
+            "$set": {
+                "password_reset_token_hash": token_hash,
+                "password_reset_expires_at": current_time + timedelta(minutes=15),
+                "updated_at": current_time,
+            }
+        },
+    )
+    link = (
+        f"http://localhost:5173/reset-password?email={user['email']}&token={token}"
+    )
+    print(f"Password reset link: {link}")
+    write_security_audit(
+        database,
+        actor_id=user.get("_id"),
+        action="password_reset_requested",
+        resource="user",
+        resource_id=user.get("_id"),
+        outcome="success",
+        ip=ip,
+        user_agent=user_agent,
+        now=current_time,
+    )
+    return link
+
+
+def confirm_password_reset(
+    database: Database[Any],
+    *,
+    email: str,
+    raw_token: str,
+    new_password: str,
+    ip: str | None = None,
+    user_agent: str | None = None,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Validate the reset token, replace the password, and invalidate refresh sessions."""
+    current_time = _as_utc(now or utc_now())
+    user = find_user_by_email(database, email)
+    if user is None:
+        raise InvalidRefreshToken("Password reset link is invalid or expired.")
+    token_hash = user.get("password_reset_token_hash")
+    expires_at = user.get("password_reset_expires_at")
+    if not token_hash or not expires_at or _as_utc(expires_at) < current_time:
+        raise InvalidRefreshToken("Password reset link is invalid or expired.")
+    if hashlib.sha256(raw_token.encode("utf-8")).hexdigest() != token_hash:
+        raise InvalidRefreshToken("Password reset link is invalid or expired.")
+    database["users"].update_one(
+        {"_id": user["_id"]},
+        {
+            "$set": {
+                "password_hash": hash_password(new_password),
+                "password_reset_token_hash": None,
+                "password_reset_expires_at": None,
+                "correct_token_version": user.get("token_version", 0) + 1,
+                "token_version": user.get("token_version", 0) + 1,
+                "updated_at": current_time,
+            }
+        },
+    )
+    database["refresh_tokens"].update_many(
+        {"user_id": user["_id"], "status": {"$ne": "revoked"}},
+        {"$set": {"status": "revoked", "revoked_at": current_time}},
+    )
+    write_security_audit(
+        database,
+        actor_id=user.get("_id"),
+        action="password_reset_confirmed",
+        resource="user",
+        resource_id=user.get("_id"),
+        outcome="success",
+        ip=ip,
+        user_agent=user_agent,
+        now=current_time,
+    )
+    return {"status": "password_reset"}
 
 
 def _raise_for_reuse(

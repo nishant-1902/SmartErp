@@ -7,6 +7,8 @@ from typing import Any
 from bson import ObjectId
 from pymongo.database import Database
 
+from common.exceptions import ValidationFailed
+
 from common.object_id import parse_object_id
 from common.time import utc_now
 
@@ -245,3 +247,79 @@ def revoke_refresh_token_family(
 def delete_refresh_token(database: Database[Any], token_id: ObjectId) -> None:
     """Delete an unissued replacement after a failed rotation compare-and-set."""
     database["refresh_tokens"].delete_one({"_id": token_id})
+
+
+def write_audit_log(
+    database: Database[Any],
+    *,
+    actor_id: ObjectId | str | None,
+    action: str,
+    resource: str,
+    resource_id: str | ObjectId | None,
+    outcome: str,
+    ip: str | None = None,
+    user_agent: str | None = None,
+    now: datetime | None = None,
+) -> ObjectId:
+    """Append an audit log entry summarizing a security-sensitive action."""
+    document = {
+        "actor_id": parse_object_id(actor_id) if actor_id is not None else None,
+        "action": action,
+        "entity_type": resource,
+        "entity_id": str(resource_id) if resource_id is not None else None,
+        "request_id": None,
+        "before": None,
+        "after": None,
+        "created_at": now or utc_now(),
+    }
+    document["outcome"] = outcome
+    document["ip"] = ip
+    document["user_agent"] = user_agent
+    return database["audit_logs"].insert_one(document).inserted_id
+
+
+def get_login_attempt(
+    database: Database[Any],
+    email: str,
+    client_ip: str,
+) -> dict[str, Any] | None:
+    """Fetch the current rate-limit record for one email/IP pair."""
+    return database["login_attempts"].find_one({
+        "email": normalize_email(email),
+        "client_ip": client_ip,
+    })
+
+
+def upsert_login_attempt(
+    database: Database[Any],
+    email: str,
+    client_ip: str,
+    *,
+    failed_count: int,
+    window_started_at: datetime,
+    expires_at: datetime,
+    locked_until: datetime | None = None,
+) -> None:
+    """Create or update the current login-attempt counter for an email/IP pair."""
+    database["login_attempts"].update_one(
+        {"email": normalize_email(email), "client_ip": client_ip},
+        {
+            "$set": {
+                "email": normalize_email(email),
+                "client_ip": client_ip,
+                "failed_count": failed_count,
+                "window_started_at": window_started_at,
+                "expires_at": expires_at,
+                "locked_until": locked_until,
+            }
+        },
+        upsert=True,
+    )
+
+
+def clear_login_attempts(database: Database[Any], email: str, client_ip: str) -> None:
+    """Clear all failed-login counters for a successful login."""
+    database["login_attempts"].delete_one({
+        "email": normalize_email(email),
+        "client_ip": client_ip,
+    })
