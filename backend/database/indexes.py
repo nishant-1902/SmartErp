@@ -96,7 +96,7 @@ COLLECTIONS: dict[str, CollectionDefinition] = {
         validator=_schema(
             (
                 "email", "password_hash", "full_name", "role", "is_active",
-                "created_at", "updated_at",
+                "token_version", "last_login_at", "created_at", "updated_at",
             ),
             {
                 "email": {
@@ -692,7 +692,7 @@ COLLECTIONS: dict[str, CollectionDefinition] = {
         validator=_schema(
             (
                 "user_id", "token_hash", "family_id", "status", "created_at",
-                "expires_at",
+                "expires_at", "revoked_at", "replaced_by", "user_agent", "ip",
             ),
             {
                 "user_id": {"bsonType": "objectId"},

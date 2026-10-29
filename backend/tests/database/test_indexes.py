@@ -102,3 +102,20 @@ def test_workflow_documents_include_required_inventory_and_order_fields():
     assert "min_stock_level" in product_fields
     assert {"quantity_change", "reserved_change", "performed_by"} <= movement_fields
     assert {"return_status", "payment_status", "status_history"} <= sales_fields
+
+
+def test_account_documents_require_security_and_rotation_fields():
+    user_fields = set(COLLECTIONS["users"].validator["$jsonSchema"]["required"])
+    refresh_fields = set(
+        COLLECTIONS["refresh_tokens"].validator["$jsonSchema"]["required"]
+    )
+
+    assert {
+        "email", "password_hash", "full_name", "role", "is_active",
+        "token_version", "last_login_at", "created_at", "updated_at",
+    } <= user_fields
+    assert "employee_id" not in user_fields
+    assert {
+        "user_id", "token_hash", "family_id", "status", "expires_at",
+        "revoked_at", "replaced_by", "user_agent", "ip",
+    } <= refresh_fields
