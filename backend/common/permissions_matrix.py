@@ -1,0 +1,122 @@
+"""Role-to-permission mapping copied from the confirmed requirements matrix."""
+
+# Employee read access and conditional purchase approval still need service-level
+# record-scope and workflow checks; this table grants capabilities only.
+ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
+    "super_admin": frozenset(
+        {
+            "users:manage",
+            "own-profile:read",
+            "own-password:change",
+            "employees:read",
+            "employees:write",
+            "departments:read",
+            "departments:write",
+            "products:read",
+            "products:write",
+            "stock:adjust",
+            "stock:read",
+            "suppliers:read",
+            "suppliers:write",
+            "purchase:create",
+            "purchase:read",
+            "purchase:submit",
+            "purchase:approve",
+            "purchase:reject",
+            "purchase:receive",
+            "purchase:cancel",
+            "customers:read",
+            "customers:write",
+            "sales:create",
+            "sales:read",
+            "sales:confirm",
+            "sales:fulfil",
+            "sales:cancel",
+            "payments:read",
+            "payments:record",
+            "invoices:read",
+            "returns:process",
+            "reports:read",
+            "audit:read",
+        }
+    ),
+    "hr_manager": frozenset(
+        {
+            "own-profile:read",
+            "own-password:change",
+            "employees:read",
+            "employees:write",
+            "departments:read",
+            "departments:write",
+            "products:read",
+            "stock:read",
+            "reports:read",
+        }
+    ),
+    "inventory_manager": frozenset(
+        {
+            "own-profile:read",
+            "own-password:change",
+            "employees:read",
+            "departments:read",
+            "products:read",
+            "products:write",
+            "stock:adjust",
+            "stock:read",
+            "suppliers:read",
+            "purchase:read",
+            "purchase:receive",
+            "sales:fulfil",
+            "reports:read",
+        }
+    ),
+    "purchase_manager": frozenset(
+        {
+            "own-profile:read",
+            "own-password:change",
+            "employees:read",
+            "departments:read",
+            "products:read",
+            "stock:read",
+            "suppliers:read",
+            "suppliers:write",
+            "purchase:create",
+            "purchase:read",
+            "purchase:submit",
+            "purchase:approve",
+            "purchase:reject",
+            "purchase:receive",
+            "purchase:cancel",
+            "reports:read",
+        }
+    ),
+    "sales_manager": frozenset(
+        {
+            "own-profile:read",
+            "own-password:change",
+            "employees:read",
+            "departments:read",
+            "products:read",
+            "stock:read",
+            "customers:read",
+            "customers:write",
+            "sales:create",
+            "sales:read",
+            "sales:confirm",
+            "sales:fulfil",
+            "sales:cancel",
+            "payments:read",
+            "payments:record",
+            "invoices:read",
+            "returns:process",
+            "reports:read",
+        }
+    ),
+    "employee": frozenset(
+        {
+            "own-profile:read",
+            "own-password:change",
+            "employees:read",
+        }
+    ),
+}

@@ -99,9 +99,12 @@ REST_FRAMEWORK = {
     "UNAUTHENTICATED_USER": None,
     "UNAUTHENTICATED_TOKEN": None,
     "EXCEPTION_HANDLER": "common.exceptions.api_exception_handler",
-    # Authentication and deny-by-default permissions are added in Phase 3.
-    "DEFAULT_AUTHENTICATION_CLASSES": [],
-    "DEFAULT_PERMISSION_CLASSES": [],
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "accounts.authentication.MongoJWTAuthentication",
+    ],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "common.permissions.IsAuthenticatedMongo",
+    ],
 }
 
 PASSWORD_HASHERS = [

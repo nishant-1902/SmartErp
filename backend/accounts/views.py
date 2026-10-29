@@ -1,7 +1,6 @@
 """JSON auth endpoints for login, refresh, logout, and profile operations."""
 
 from contextlib import contextmanager
-from datetime import datetime, timedelta
 from typing import Any
 
 from django.conf import settings
@@ -9,6 +8,7 @@ from django.core.exceptions import ImproperlyConfigured
 from pymongo import MongoClient
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
 
+from common.permissions import IsAuthenticatedMongo, require
 from accounts.passwords import hash_password, validate_password_strength, verify_password
 from accounts.repository import (
     find_refresh_token_by_hash,
@@ -36,7 +36,7 @@ from accounts.services import (
     rotate_refresh_token,
     write_security_audit,
 )
-from accounts.tokens import create_access_token, decode_access_token
+from accounts.tokens import create_access_token
 from common.responses import error_response, success_response
 from common.time import utc_now
 
@@ -84,18 +84,11 @@ def build_login_response(data: dict[str, Any], *, refresh_token: str | None = No
     return response
 
 
-def _user_from_authorization_header(request: Any):
-    """Resolve the current user from the Authorization header and token version."""
-    auth_header = request.META.get("HTTP_AUTHORIZATION", "")
-    if not auth_header.startswith("Bearer "):
-        raise ValueError("Authentication required.")
-    token = auth_header.split(" ", 1)[1].strip()
-    payload = decode_access_token(token)
+def _authenticated_user_document(request: Any) -> dict[str, Any]:
+    """Load the authenticated user's current profile document through the repository."""
     with mongo_database() as database:
-        user = find_user_by_id(database, payload["sub"])
-    if user is None or user.get("is_active") is not True:
-        raise ValueError("Authentication required.")
-    if payload.get("token_version") != user.get("token_version"):
+        user = find_user_by_id(database, request.user.id)
+    if user is None:
         raise ValueError("Authentication required.")
     return user
 
@@ -276,8 +269,6 @@ def refresh_view(request):
 
 
 @api_view(["POST"])
-@authentication_classes([])
-@permission_classes([])
 def logout_view(request):
     """Clear the current refresh cookie and revoke the token family."""
     if not _guard_csrf(request):
@@ -320,20 +311,18 @@ def logout_view(request):
 
 
 @api_view(["GET"])
-@authentication_classes([])
-@permission_classes([])
+@permission_classes([IsAuthenticatedMongo, require("own-profile:read")])
 def me_view(request):
     """Return the current authenticated user profile."""
     try:
-        user = _user_from_authorization_header(request)
+        user = _authenticated_user_document(request)
     except ValueError:
         return error_response("authentication_required", "Authentication required.", status=401)
     return success_response({"user": get_public_user(user)})
 
 
 @api_view(["POST"])
-@authentication_classes([])
-@permission_classes([])
+@permission_classes([IsAuthenticatedMongo, require("own-password:change")])
 def change_password_view(request):
     """Require the current password, then replace it and revoke all refresh sessions."""
     serializer = ChangePasswordSerializer(data=request.data)
@@ -346,7 +335,7 @@ def change_password_view(request):
         )
 
     try:
-        user = _user_from_authorization_header(request)
+        user = _authenticated_user_document(request)
     except ValueError:
         return error_response("authentication_required", "Authentication required.", status=401)
 
@@ -381,8 +370,6 @@ def change_password_view(request):
 
 
 @api_view(["POST"])
-@authentication_classes([])
-@permission_classes([])
 def password_reset_request_view(request):
     """Request a password reset for an email address; the link is printed in development."""
     serializer = PasswordResetRequestSerializer(data=request.data)
@@ -409,8 +396,6 @@ def password_reset_request_view(request):
 
 
 @api_view(["POST"])
-@authentication_classes([])
-@permission_classes([])
 def password_reset_confirm_view(request):
     """Confirm a single-use password-reset token and replace the password."""
     serializer = PasswordResetConfirmSerializer(data=request.data)
