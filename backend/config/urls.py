@@ -24,5 +24,7 @@ def api_root_not_found(request: HttpRequest) -> JsonResponse:
 urlpatterns = [
     path("api/health/", health_check, name="health"),
     path("api/auth/", include("accounts.urls")),
+    path("api/users/", include("accounts.user_urls")),
+    path("api/audit-logs/", include("accounts.audit_urls")),
     path("", api_root_not_found, name="api-root-not-found"),
 ]

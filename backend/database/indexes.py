@@ -682,6 +682,8 @@ COLLECTIONS: dict[str, CollectionDefinition] = {
                 ("created_at", -1),
             ),
             _index("ix_audit_actor_created", ("actor_id", 1), ("created_at", -1)),
+            _index("ix_audit_action_created", ("action", 1), ("created_at", -1)),
+            _index("ix_audit_created", ("created_at", -1)),
         ),
     ),
     "refresh_tokens": CollectionDefinition(

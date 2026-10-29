@@ -17,10 +17,15 @@ from accounts.repository import (
     update_user,
 )
 from accounts.serializers import (
+    AuditLogQuerySerializer,
     ChangePasswordSerializer,
+    EmptyActionSerializer,
     EmailPasswordSerializer,
     PasswordResetConfirmSerializer,
     PasswordResetRequestSerializer,
+    UserCreateSerializer,
+    UserListQuerySerializer,
+    UserPatchSerializer,
 )
 from accounts.services import (
     InvalidRefreshToken,
@@ -28,16 +33,26 @@ from accounts.services import (
     check_login_lockout,
     confirm_password_reset,
     create_refresh_token,
+    activate_managed_user,
+    create_managed_user,
+    deactivate_managed_user,
     get_public_user,
+    get_managed_user,
     hash_refresh_token,
+    initiate_admin_password_reset,
+    list_managed_audit_logs,
+    list_managed_users,
     record_failed_login,
     record_successful_login,
     request_password_reset,
     rotate_refresh_token,
+    update_managed_user,
     write_security_audit,
 )
 from accounts.tokens import create_access_token
 from common.responses import error_response, success_response
+from common.object_id import parse_object_id
+from common.pagination import parse_pagination
 from common.time import utc_now
 
 
@@ -396,6 +411,8 @@ def password_reset_request_view(request):
 
 
 @api_view(["POST"])
+@authentication_classes([])
+@permission_classes([])
 def password_reset_confirm_view(request):
     """Confirm a single-use password-reset token and replace the password."""
     serializer = PasswordResetConfirmSerializer(data=request.data)
@@ -428,3 +445,197 @@ def password_reset_confirm_view(request):
             exc.default_detail,
             status=exc.status_code,
         )
+
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticatedMongo, require("users:manage")])
+def users_list_create_view(request):
+    """List users or create a new account for an administrator."""
+    with mongo_database() as database:
+        if request.method == "GET":
+            serializer = UserListQuerySerializer(data=request.query_params)
+            if not serializer.is_valid():
+                return error_response(
+                    "validation_error",
+                    "Request validation failed.",
+                    details=serializer.errors,
+                    status=400,
+                )
+            filters = serializer.validated_data
+            pagination = parse_pagination(
+                filters["page"],
+                filters["page_size"],
+            )
+            users, meta = list_managed_users(
+                database,
+                search=filters.get("search"),
+                role=filters.get("role"),
+                is_active=filters.get("is_active"),
+                pagination=pagination,
+                actor_id=request.user.id,
+                ip=get_client_ip(request),
+                user_agent=get_user_agent(request),
+            )
+            return success_response({"users": users}, meta=meta)
+
+        serializer = UserCreateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return error_response(
+                "validation_error",
+                "Request validation failed.",
+                details=serializer.errors,
+                status=400,
+            )
+        user = create_managed_user(
+            database,
+            email=serializer.validated_data["email"],
+            password=serializer.validated_data["password"],
+            full_name=serializer.validated_data["full_name"],
+            role=serializer.validated_data["role"],
+            employee_id=serializer.validated_data.get("employee_id"),
+            actor_id=request.user.id,
+            ip=get_client_ip(request),
+            user_agent=get_user_agent(request),
+        )
+        return success_response({"user": user}, status=201)
+
+
+@api_view(["GET", "PATCH"])
+@permission_classes([IsAuthenticatedMongo, require("users:manage")])
+def user_detail_view(request, user_id: str):
+    """Read or edit one managed user account."""
+    parsed_user_id = parse_object_id(user_id)
+    with mongo_database() as database:
+        if request.method == "GET":
+            return success_response(
+                {
+                    "user": get_managed_user(
+                        database,
+                        parsed_user_id,
+                        actor_id=request.user.id,
+                        ip=get_client_ip(request),
+                        user_agent=get_user_agent(request),
+                    )
+                }
+            )
+
+        serializer = UserPatchSerializer(data=request.data)
+        if not serializer.is_valid():
+            return error_response(
+                "validation_error",
+                "Request validation failed.",
+                details=serializer.errors,
+                status=400,
+            )
+        user = update_managed_user(
+            database,
+            parsed_user_id,
+            serializer.validated_data,
+            actor_id=request.user.id,
+            ip=get_client_ip(request),
+            user_agent=get_user_agent(request),
+        )
+        return success_response({"user": user})
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticatedMongo, require("users:manage")])
+def user_activate_view(request, user_id: str):
+    """Activate a managed user account."""
+    serializer = EmptyActionSerializer(data=request.data)
+    if not serializer.is_valid():
+        return error_response(
+            "validation_error",
+            "Request validation failed.",
+            details=serializer.errors,
+            status=400,
+        )
+    with mongo_database() as database:
+        user = activate_managed_user(
+            database,
+            parse_object_id(user_id),
+            actor_id=request.user.id,
+            ip=get_client_ip(request),
+            user_agent=get_user_agent(request),
+        )
+    return success_response({"user": user})
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticatedMongo, require("users:manage")])
+def user_deactivate_view(request, user_id: str):
+    """Deactivate a managed user account and revoke its refresh tokens."""
+    serializer = EmptyActionSerializer(data=request.data)
+    if not serializer.is_valid():
+        return error_response(
+            "validation_error",
+            "Request validation failed.",
+            details=serializer.errors,
+            status=400,
+        )
+    with mongo_database() as database:
+        user = deactivate_managed_user(
+            database,
+            parse_object_id(user_id),
+            actor_id=request.user.id,
+            ip=get_client_ip(request),
+            user_agent=get_user_agent(request),
+        )
+    return success_response({"user": user})
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticatedMongo, require("users:manage")])
+def user_reset_password_view(request, user_id: str):
+    """Start the single-use password-reset flow for a managed user."""
+    serializer = EmptyActionSerializer(data=request.data)
+    if not serializer.is_valid():
+        return error_response(
+            "validation_error",
+            "Request validation failed.",
+            details=serializer.errors,
+            status=400,
+        )
+    with mongo_database() as database:
+        initiate_admin_password_reset(
+            database,
+            parse_object_id(user_id),
+            actor_id=request.user.id,
+            ip=get_client_ip(request),
+            user_agent=get_user_agent(request),
+        )
+    return success_response(
+        {"message": "A password reset link has been generated."}
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticatedMongo, require("audit:read")])
+def audit_logs_list_view(request):
+    """List audit records for authorized users with filters and pagination."""
+    serializer = AuditLogQuerySerializer(data=request.query_params)
+    if not serializer.is_valid():
+        return error_response(
+            "validation_error",
+            "Request validation failed.",
+            details=serializer.errors,
+            status=400,
+        )
+    filters = serializer.validated_data
+    pagination = parse_pagination(
+        filters["page"],
+        filters["page_size"],
+    )
+    with mongo_database() as database:
+        records, meta = list_managed_audit_logs(
+            database,
+            user_id=filters.get("user"),
+            action=filters.get("action"),
+            start_date=filters.get("start_date"),
+            end_date=filters.get("end_date"),
+            pagination=pagination,
+            actor_id=request.user.id,
+            ip=get_client_ip(request),
+            user_agent=get_user_agent(request),
+        )
+    return success_response({"audit_logs": records}, meta=meta)

@@ -2,12 +2,11 @@
 
 from collections.abc import Mapping
 from datetime import datetime
+import re
 from typing import Any
 
 from bson import ObjectId
 from pymongo.database import Database
-
-from common.exceptions import ValidationFailed
 
 from common.object_id import parse_object_id
 from common.time import utc_now
@@ -55,6 +54,7 @@ def create_user(
     full_name: str,
     role: str,
     employee_id: ObjectId | str | None = None,
+    session: Any = None,
 ) -> dict[str, Any]:
     """Create and return a user document with normalized account fields."""
     normalized_name = full_name.strip()
@@ -80,7 +80,7 @@ def create_user(
         "created_at": now,
         "updated_at": now,
     }
-    result = database["users"].insert_one(document)
+    result = database["users"].insert_one(document, session=session)
     document["_id"] = result.inserted_id
     return document
 
@@ -93,15 +93,20 @@ def find_user_by_email(database: Database[Any], email: str) -> dict[str, Any] | 
 def find_user_by_id(
     database: Database[Any],
     user_id: ObjectId | str,
+    session: Any = None,
 ) -> dict[str, Any] | None:
     """Find a user by a validated BSON ObjectId."""
-    return database["users"].find_one({"_id": parse_object_id(user_id)})
+    return database["users"].find_one(
+        {"_id": parse_object_id(user_id)},
+        session=session,
+    )
 
 
 def update_user(
     database: Database[Any],
     user_id: ObjectId | str,
     updates: Mapping[str, Any],
+    session: Any = None,
 ) -> dict[str, Any] | None:
     """Update an allowlisted set of user fields and return the updated document."""
     if not updates:
@@ -129,19 +134,25 @@ def update_user(
     update: dict[str, Any] = {
         "$set": {**changes, "updated_at": utc_now()}
     }
-    if "password_hash" in changes or changes.get("is_active") is False:
+    if (
+        "password_hash" in changes
+        or changes.get("is_active") is False
+        or "role" in changes
+    ):
         update["$inc"] = {"token_version": 1}
 
     database["users"].update_one(
         {"_id": parse_object_id(user_id)},
         update,
+        session=session,
     )
-    return find_user_by_id(database, user_id)
+    return find_user_by_id(database, user_id, session=session)
 
 
 def deactivate_user(
     database: Database[Any],
     user_id: ObjectId | str,
+    session: Any = None,
 ) -> dict[str, Any] | None:
     """Deactivate a user and invalidate all of that user's access tokens."""
     database["users"].update_one(
@@ -150,8 +161,223 @@ def deactivate_user(
             "$set": {"is_active": False, "updated_at": utc_now()},
             "$inc": {"token_version": 1},
         },
+        session=session,
     )
-    return find_user_by_id(database, user_id)
+    return find_user_by_id(database, user_id, session=session)
+
+
+def activate_user(
+    database: Database[Any],
+    user_id: ObjectId | str,
+    session: Any = None,
+) -> dict[str, Any] | None:
+    """Activate a user without changing their current token version."""
+    database["users"].update_one(
+        {"_id": parse_object_id(user_id), "is_active": False},
+        {"$set": {"is_active": True, "updated_at": utc_now()}},
+        session=session,
+    )
+    return find_user_by_id(database, user_id, session=session)
+
+
+def set_password_reset_token(
+    database: Database[Any],
+    user_id: ObjectId | str,
+    *,
+    token_hash: str,
+    expires_at: datetime,
+    now: datetime,
+    session: Any = None,
+) -> bool:
+    """Store a single-use hashed password-reset token for a user."""
+    result = database["users"].update_one(
+        {"_id": parse_object_id(user_id)},
+        {
+            "$set": {
+                "password_reset_token_hash": token_hash,
+                "password_reset_expires_at": expires_at,
+                "updated_at": now,
+            }
+        },
+        session=session,
+    )
+    return result.matched_count == 1
+
+
+def consume_password_reset_token(
+    database: Database[Any],
+    user_id: ObjectId | str,
+    *,
+    token_hash: str,
+    password_hash: str,
+    now: datetime,
+    session: Any = None,
+) -> bool:
+    """Atomically consume an unexpired matching reset token and replace the hash."""
+    result = database["users"].update_one(
+        {
+            "_id": parse_object_id(user_id),
+            "password_reset_token_hash": token_hash,
+            "password_reset_expires_at": {"$gte": now},
+        },
+        {
+            "$set": {
+                "password_hash": password_hash,
+                "password_reset_token_hash": None,
+                "password_reset_expires_at": None,
+                "updated_at": now,
+            },
+            "$inc": {"token_version": 1},
+        },
+        session=session,
+    )
+    return result.matched_count == 1
+
+
+def count_active_super_admins(
+    database: Database[Any],
+    session: Any = None,
+) -> int:
+    """Count active users with the Super Admin role."""
+    return database["users"].count_documents(
+        {"role": "super_admin", "is_active": True},
+        session=session,
+    )
+
+
+def lock_super_admin_changes(
+    database: Database[Any],
+    *,
+    now: datetime,
+    session: Any = None,
+) -> None:
+    """Serialize last-Super-Admin checks through one transactional counter write."""
+    database["counters"].update_one(
+        {"_id": "active_super_admin_guard"},
+        {"$inc": {"value": 1}, "$set": {"updated_at": now}},
+        upsert=True,
+        session=session,
+    )
+
+
+def list_users(
+    database: Database[Any],
+    *,
+    search: str | None,
+    role: str | None,
+    is_active: bool | None,
+    skip: int,
+    limit: int,
+) -> list[dict[str, Any]]:
+    """Return one page of users matching validated management filters."""
+    query: dict[str, Any] = {}
+    if search:
+        escaped = re.escape(search.strip())
+        query["$or"] = [
+            {"email": {"$regex": escaped, "$options": "i"}},
+            {"full_name": {"$regex": escaped, "$options": "i"}},
+        ]
+    if role is not None:
+        query["role"] = role
+    if is_active is not None:
+        query["is_active"] = is_active
+
+    cursor = (
+        database["users"]
+        .find(query)
+        .sort([("created_at", -1), ("_id", 1)])
+        .skip(skip)
+        .limit(limit)
+    )
+    return list(cursor)
+
+
+def count_users(
+    database: Database[Any],
+    *,
+    search: str | None,
+    role: str | None,
+    is_active: bool | None,
+) -> int:
+    """Count users matching the same validated management filters."""
+    query: dict[str, Any] = {}
+    if search:
+        escaped = re.escape(search.strip())
+        query["$or"] = [
+            {"email": {"$regex": escaped, "$options": "i"}},
+            {"full_name": {"$regex": escaped, "$options": "i"}},
+        ]
+    if role is not None:
+        query["role"] = role
+    if is_active is not None:
+        query["is_active"] = is_active
+    return database["users"].count_documents(query)
+
+
+def list_audit_logs(
+    database: Database[Any],
+    *,
+    user_id: ObjectId | None,
+    action: str | None,
+    start_date: datetime | None,
+    end_date: datetime | None,
+    skip: int,
+    limit: int,
+) -> list[dict[str, Any]]:
+    """Return one page of audit events matching validated filters."""
+    query: dict[str, Any] = {}
+    if user_id is not None:
+        query["$or"] = [
+            {"actor_id": user_id},
+            {"entity_id": user_id},
+            {"entity_id": str(user_id)},
+        ]
+    if action is not None:
+        query["action"] = action
+    created_at: dict[str, datetime] = {}
+    if start_date is not None:
+        created_at["$gte"] = start_date
+    if end_date is not None:
+        created_at["$lte"] = end_date
+    if created_at:
+        query["created_at"] = created_at
+
+    cursor = (
+        database["audit_logs"]
+        .find(query)
+        .sort([("created_at", -1), ("_id", -1)])
+        .skip(skip)
+        .limit(limit)
+    )
+    return list(cursor)
+
+
+def count_audit_logs(
+    database: Database[Any],
+    *,
+    user_id: ObjectId | None,
+    action: str | None,
+    start_date: datetime | None,
+    end_date: datetime | None,
+) -> int:
+    """Count audit events matching the same validated filters."""
+    query: dict[str, Any] = {}
+    if user_id is not None:
+        query["$or"] = [
+            {"actor_id": user_id},
+            {"entity_id": user_id},
+            {"entity_id": str(user_id)},
+        ]
+    if action is not None:
+        query["action"] = action
+    created_at: dict[str, datetime] = {}
+    if start_date is not None:
+        created_at["$gte"] = start_date
+    if end_date is not None:
+        created_at["$lte"] = end_date
+    if created_at:
+        query["created_at"] = created_at
+    return database["audit_logs"].count_documents(query)
 
 
 def create_refresh_token(
@@ -244,6 +470,20 @@ def revoke_refresh_token_family(
     )
 
 
+def revoke_user_refresh_tokens(
+    database: Database[Any],
+    user_id: ObjectId | str,
+    now: datetime,
+    session: Any = None,
+) -> None:
+    """Revoke every refresh token belonging to one user."""
+    database["refresh_tokens"].update_many(
+        {"user_id": parse_object_id(user_id), "status": {"$ne": "revoked"}},
+        {"$set": {"status": "revoked", "revoked_at": now}},
+        session=session,
+    )
+
+
 def delete_refresh_token(database: Database[Any], token_id: ObjectId) -> None:
     """Delete an unissued replacement after a failed rotation compare-and-set."""
     database["refresh_tokens"].delete_one({"_id": token_id})
@@ -260,6 +500,7 @@ def write_audit_log(
     ip: str | None = None,
     user_agent: str | None = None,
     now: datetime | None = None,
+    session: Any = None,
 ) -> ObjectId:
     """Append an audit log entry summarizing a security-sensitive action."""
     document = {
@@ -275,7 +516,7 @@ def write_audit_log(
     document["outcome"] = outcome
     document["ip"] = ip
     document["user_agent"] = user_agent
-    return database["audit_logs"].insert_one(document).inserted_id
+    return database["audit_logs"].insert_one(document, session=session).inserted_id
 
 
 def get_login_attempt(

@@ -119,3 +119,14 @@ def test_account_documents_require_security_and_rotation_fields():
         "user_id", "token_hash", "family_id", "status", "expires_at",
         "revoked_at", "replaced_by", "user_agent", "ip",
     } <= refresh_fields
+
+
+def test_audit_log_indexes_support_user_action_and_date_filters():
+    indexes = {
+        index.name: tuple(field for field, _ in index.keys)
+        for index in COLLECTIONS["audit_logs"].indexes
+    }
+
+    assert indexes["ix_audit_actor_created"] == ("actor_id", "created_at")
+    assert indexes["ix_audit_action_created"] == ("action", "created_at")
+    assert indexes["ix_audit_created"] == ("created_at",)

@@ -210,6 +210,14 @@ def test_health_and_login_refresh_are_public_but_other_auth_routes_are_protected
         assert client.post("/api/auth/logout/").status_code == 401
         assert (
             client.post(
+                "/api/auth/password-reset/confirm/",
+                {},
+                format="json",
+            ).status_code
+            == 400
+        )
+        assert (
+            client.post(
                 "/api/auth/password-reset/request/",
                 {"email": "user@example.test"},
                 format="json",

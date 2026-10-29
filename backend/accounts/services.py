@@ -1,9 +1,11 @@
 """Business logic for refresh-token issuance and rotation."""
 
 import hashlib
+import hmac
 import secrets
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Generator
 
 from bson import ObjectId
 from django.conf import settings
@@ -11,21 +13,38 @@ from django.core.exceptions import ImproperlyConfigured
 from pymongo.database import Database
 from rest_framework.exceptions import APIException
 
-from accounts.passwords import hash_password, verify_password
+from accounts.passwords import hash_password, validate_password_strength
 from accounts.repository import (
+    USER_ROLES,
+    activate_user as activate_user_record,
     clear_login_attempts,
+    count_active_super_admins,
+    count_audit_logs,
+    count_users,
+    consume_password_reset_token,
     create_refresh_token as insert_refresh_token,
+    create_user as insert_user,
     delete_refresh_token,
+    deactivate_user as deactivate_user_record,
     find_refresh_token_by_hash,
     find_user_by_email,
     find_user_by_id,
     get_login_attempt,
+    list_audit_logs as list_audit_log_records,
+    list_users as list_user_records,
+    lock_super_admin_changes,
     revoke_refresh_token_family,
+    revoke_user_refresh_tokens,
     rotate_refresh_token_record,
+    set_password_reset_token,
     upsert_login_attempt,
+    update_user as update_user_record,
     write_audit_log,
 )
+from common.exceptions import ConflictError, NotFoundError
 from common.object_id import parse_object_id
+from common.pagination import Pagination
+from common.serialization import serialize_document
 from common.time import utc_now
 
 REFRESH_RACE_GRACE_SECONDS = 10
@@ -108,6 +127,7 @@ def write_security_audit(
     ip: str | None = None,
     user_agent: str | None = None,
     now: datetime | None = None,
+    session: Any = None,
 ) -> None:
     """Record a security-sensitive event for later auditing."""
     write_audit_log(
@@ -120,7 +140,388 @@ def write_security_audit(
         ip=ip,
         user_agent=user_agent,
         now=now,
+        session=session,
     )
+
+
+@contextmanager
+def _account_transaction(database: Database[Any]) -> Generator[Any, None, None]:
+    """Run multi-collection account mutations atomically on replica-set MongoDB."""
+    client = getattr(database, "client", None)
+    if client is None or not callable(getattr(client, "start_session", None)):
+        yield None
+        return
+    with client.start_session() as session:
+        with session.start_transaction():
+            yield session
+
+
+def list_managed_users(
+    database: Database[Any],
+    *,
+    search: str | None,
+    role: str | None,
+    is_active: bool | None,
+    pagination: Pagination,
+    actor_id: ObjectId | str,
+    ip: str | None,
+    user_agent: str | None,
+    now: datetime | None = None,
+) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    """List users using validated filters and standard pagination metadata."""
+    filters = {"search": search, "role": role, "is_active": is_active}
+    users = list_user_records(
+        database,
+        **filters,
+        skip=pagination.skip,
+        limit=pagination.limit,
+    )
+    total = count_users(database, **filters)
+    write_security_audit(
+        database,
+        actor_id=actor_id,
+        action="users_listed",
+        resource="user",
+        resource_id=actor_id,
+        outcome="success",
+        ip=ip,
+        user_agent=user_agent,
+        now=now or utc_now(),
+    )
+    return [
+        serialize_document(get_public_user(user))
+        for user in users
+    ], pagination.build_meta(total)
+
+
+def get_managed_user(
+    database: Database[Any],
+    user_id: ObjectId | str,
+    *,
+    actor_id: ObjectId | str,
+    ip: str | None,
+    user_agent: str | None,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Fetch one public user document or raise a safe not-found error."""
+    user = find_user_by_id(database, user_id)
+    if user is None:
+        raise NotFoundError("User was not found.")
+    write_security_audit(
+        database,
+        actor_id=actor_id,
+        action="user_read",
+        resource="user",
+        resource_id=user_id,
+        outcome="success",
+        ip=ip,
+        user_agent=user_agent,
+        now=now or utc_now(),
+    )
+    return serialize_document(get_public_user(user))
+
+
+def create_managed_user(
+    database: Database[Any],
+    *,
+    email: str,
+    password: str,
+    full_name: str,
+    role: str,
+    employee_id: ObjectId | str | None,
+    actor_id: ObjectId | str,
+    ip: str | None,
+    user_agent: str | None,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Create a user and audit the action in one transaction."""
+    current_time = now or utc_now()
+    if role not in USER_ROLES:
+        raise ValueError("Role is not supported.")
+    with _account_transaction(database) as session:
+        user = insert_user(
+            database,
+            email=email,
+            password_hash=hash_password(password),
+            full_name=full_name,
+            role=role,
+            employee_id=employee_id,
+            session=session,
+        )
+        write_security_audit(
+            database,
+            actor_id=actor_id,
+            action="user_created",
+            resource="user",
+            resource_id=user["_id"],
+            outcome="success",
+            ip=ip,
+            user_agent=user_agent,
+            now=current_time,
+            session=session,
+        )
+    return serialize_document(get_public_user(user))
+
+
+def update_managed_user(
+    database: Database[Any],
+    user_id: ObjectId | str,
+    updates: dict[str, Any],
+    *,
+    actor_id: ObjectId | str,
+    ip: str | None,
+    user_agent: str | None,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Apply allowlisted user changes and audit them atomically."""
+    current_time = now or utc_now()
+    parsed_user_id = parse_object_id(user_id)
+    try:
+        with _account_transaction(database) as session:
+            before = find_user_by_id(database, parsed_user_id, session=session)
+            if before is None:
+                raise NotFoundError("User was not found.")
+            if (
+                before.get("role") == "super_admin"
+                and before.get("is_active") is True
+                and updates.get("role", "super_admin") != "super_admin"
+            ):
+                lock_super_admin_changes(database, now=current_time, session=session)
+                if count_active_super_admins(database, session=session) <= 1:
+                    raise ConflictError("The last active Super Admin cannot be removed.")
+            updated = update_user_record(
+                database,
+                parsed_user_id,
+                updates,
+                session=session,
+            )
+            if updated is None:
+                raise NotFoundError("User was not found.")
+            write_security_audit(
+                database,
+                actor_id=actor_id,
+                action="user_updated",
+                resource="user",
+                resource_id=parsed_user_id,
+                outcome="success",
+                ip=ip,
+                user_agent=user_agent,
+                now=current_time,
+                session=session,
+            )
+    except ConflictError:
+        write_security_audit(
+            database,
+            actor_id=actor_id,
+            action="user_updated",
+            resource="user",
+            resource_id=parsed_user_id,
+            outcome="denied",
+            ip=ip,
+            user_agent=user_agent,
+            now=current_time,
+        )
+        raise
+    return serialize_document(get_public_user(updated))
+
+
+def deactivate_managed_user(
+    database: Database[Any],
+    user_id: ObjectId | str,
+    *,
+    actor_id: ObjectId | str,
+    ip: str | None,
+    user_agent: str | None,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Deactivate a user, revoke refresh tokens, and audit the change atomically."""
+    current_time = now or utc_now()
+    parsed_user_id = parse_object_id(user_id)
+    if parse_object_id(actor_id) == parsed_user_id:
+        write_security_audit(
+            database,
+            actor_id=actor_id,
+            action="user_deactivated",
+            resource="user",
+            resource_id=parsed_user_id,
+            outcome="denied",
+            ip=ip,
+            user_agent=user_agent,
+            now=current_time,
+        )
+        raise ConflictError("You cannot deactivate your own account.")
+    try:
+        with _account_transaction(database) as session:
+            user = find_user_by_id(database, parsed_user_id, session=session)
+            if user is None:
+                raise NotFoundError("User was not found.")
+            if user.get("is_active") is True and user.get("role") == "super_admin":
+                lock_super_admin_changes(database, now=current_time, session=session)
+                if count_active_super_admins(database, session=session) <= 1:
+                    raise ConflictError("The last active Super Admin cannot be removed.")
+            updated = deactivate_user_record(
+                database,
+                parsed_user_id,
+                session=session,
+            )
+            if updated is None:
+                raise NotFoundError("User was not found.")
+            revoke_user_refresh_tokens(
+                database,
+                parsed_user_id,
+                current_time,
+                session=session,
+            )
+            write_security_audit(
+                database,
+                actor_id=actor_id,
+                action="user_deactivated",
+                resource="user",
+                resource_id=parsed_user_id,
+                outcome="success",
+                ip=ip,
+                user_agent=user_agent,
+                now=current_time,
+                session=session,
+            )
+    except ConflictError:
+        write_security_audit(
+            database,
+            actor_id=actor_id,
+            action="user_deactivated",
+            resource="user",
+            resource_id=parsed_user_id,
+            outcome="denied",
+            ip=ip,
+            user_agent=user_agent,
+            now=current_time,
+        )
+        raise
+    return serialize_document(get_public_user(updated))
+
+
+def activate_managed_user(
+    database: Database[Any],
+    user_id: ObjectId | str,
+    *,
+    actor_id: ObjectId | str,
+    ip: str | None,
+    user_agent: str | None,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Activate a user and audit the action atomically."""
+    current_time = now or utc_now()
+    parsed_user_id = parse_object_id(user_id)
+    with _account_transaction(database) as session:
+        updated = activate_user_record(database, parsed_user_id, session=session)
+        if updated is None:
+            raise NotFoundError("User was not found.")
+        write_security_audit(
+            database,
+            actor_id=actor_id,
+            action="user_activated",
+            resource="user",
+            resource_id=parsed_user_id,
+            outcome="success",
+            ip=ip,
+            user_agent=user_agent,
+            now=current_time,
+            session=session,
+        )
+    return serialize_document(get_public_user(updated))
+
+
+def initiate_admin_password_reset(
+    database: Database[Any],
+    user_id: ObjectId | str,
+    *,
+    actor_id: ObjectId | str,
+    ip: str | None,
+    user_agent: str | None,
+    now: datetime | None = None,
+) -> None:
+    """Issue a hashed one-time reset token and audit an administrator's request."""
+    if not settings.DEBUG:
+        raise ImproperlyConfigured(
+            "Password-reset email delivery is not configured outside development."
+        )
+    current_time = _as_utc(now or utc_now())
+    parsed_user_id = parse_object_id(user_id)
+    token = secrets.token_urlsafe(32)
+    user = find_user_by_id(database, parsed_user_id)
+    if user is None:
+        raise NotFoundError("User was not found.")
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    with _account_transaction(database) as session:
+        if not set_password_reset_token(
+            database,
+            parsed_user_id,
+            token_hash=token_hash,
+            expires_at=current_time + timedelta(minutes=15),
+            now=current_time,
+            session=session,
+        ):
+            raise NotFoundError("User was not found.")
+        write_security_audit(
+            database,
+            actor_id=actor_id,
+            action="admin_password_reset_requested",
+            resource="user",
+            resource_id=parsed_user_id,
+            outcome="success",
+            ip=ip,
+            user_agent=user_agent,
+            now=current_time,
+            session=session,
+        )
+    link = (
+        f"http://localhost:5173/reset-password?email={user['email']}&token={token}"
+    )
+    print(f"Password reset link: {link}")
+
+
+def list_managed_audit_logs(
+    database: Database[Any],
+    *,
+    user_id: ObjectId | None,
+    action: str | None,
+    start_date: datetime | None,
+    end_date: datetime | None,
+    pagination: Pagination,
+    actor_id: ObjectId | str,
+    ip: str | None,
+    user_agent: str | None,
+    now: datetime | None = None,
+) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    """List audit records with validated filters and pagination metadata."""
+    filters = {
+        "user_id": user_id,
+        "action": action,
+        "start_date": start_date,
+        "end_date": end_date,
+    }
+    records = list_audit_log_records(
+        database,
+        **filters,
+        skip=pagination.skip,
+        limit=pagination.limit,
+    )
+    total = count_audit_logs(database, **filters)
+    write_security_audit(
+        database,
+        actor_id=actor_id,
+        action="audit_logs_read",
+        resource="audit_log",
+        resource_id=actor_id,
+        outcome="success",
+        ip=ip,
+        user_agent=user_agent,
+        now=now or utc_now(),
+    )
+    return [
+        serialize_document(record)
+        for record in records
+    ], pagination.build_meta(total)
 
 
 def get_public_user(user: dict[str, Any]) -> dict[str, Any]:
@@ -256,37 +657,40 @@ def request_password_reset(
     now: datetime | None = None,
 ) -> str | None:
     """Issue a single-use password-reset token for the matching email account."""
+    if not settings.DEBUG:
+        raise ImproperlyConfigured(
+            "Password-reset email delivery is not configured outside development."
+        )
     user = find_user_by_email(database, email)
     if user is None:
         return None
     current_time = _as_utc(now or utc_now())
     token = secrets.token_urlsafe(32)
     token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
-    database["users"].update_one(
-        {"_id": user["_id"]},
-        {
-            "$set": {
-                "password_reset_token_hash": token_hash,
-                "password_reset_expires_at": current_time + timedelta(minutes=15),
-                "updated_at": current_time,
-            }
-        },
-    )
-    link = (
-        f"http://localhost:5173/reset-password?email={user['email']}&token={token}"
-    )
+    with _account_transaction(database) as session:
+        if not set_password_reset_token(
+            database,
+            user["_id"],
+            token_hash=token_hash,
+            expires_at=current_time + timedelta(minutes=15),
+            now=current_time,
+            session=session,
+        ):
+            raise NotFoundError("User was not found.")
+        write_security_audit(
+            database,
+            actor_id=user.get("_id"),
+            action="password_reset_requested",
+            resource="user",
+            resource_id=user.get("_id"),
+            outcome="success",
+            ip=ip,
+            user_agent=user_agent,
+            now=current_time,
+            session=session,
+        )
+    link = f"http://localhost:5173/reset-password?email={user['email']}&token={token}"
     print(f"Password reset link: {link}")
-    write_security_audit(
-        database,
-        actor_id=user.get("_id"),
-        action="password_reset_requested",
-        resource="user",
-        resource_id=user.get("_id"),
-        outcome="success",
-        ip=ip,
-        user_agent=user_agent,
-        now=current_time,
-    )
     return link
 
 
@@ -309,36 +713,39 @@ def confirm_password_reset(
     expires_at = user.get("password_reset_expires_at")
     if not token_hash or not expires_at or _as_utc(expires_at) < current_time:
         raise InvalidRefreshToken("Password reset link is invalid or expired.")
-    if hashlib.sha256(raw_token.encode("utf-8")).hexdigest() != token_hash:
+    submitted_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+    if not hmac.compare_digest(submitted_hash, token_hash):
         raise InvalidRefreshToken("Password reset link is invalid or expired.")
-    database["users"].update_one(
-        {"_id": user["_id"]},
-        {
-            "$set": {
-                "password_hash": hash_password(new_password),
-                "password_reset_token_hash": None,
-                "password_reset_expires_at": None,
-                "correct_token_version": user.get("token_version", 0) + 1,
-                "token_version": user.get("token_version", 0) + 1,
-                "updated_at": current_time,
-            }
-        },
-    )
-    database["refresh_tokens"].update_many(
-        {"user_id": user["_id"], "status": {"$ne": "revoked"}},
-        {"$set": {"status": "revoked", "revoked_at": current_time}},
-    )
-    write_security_audit(
-        database,
-        actor_id=user.get("_id"),
-        action="password_reset_confirmed",
-        resource="user",
-        resource_id=user.get("_id"),
-        outcome="success",
-        ip=ip,
-        user_agent=user_agent,
-        now=current_time,
-    )
+    validate_password_strength(new_password, user["email"])
+    with _account_transaction(database) as session:
+        consumed = consume_password_reset_token(
+            database,
+            user["_id"],
+            token_hash=token_hash,
+            password_hash=hash_password(new_password),
+            now=current_time,
+            session=session,
+        )
+        if not consumed:
+            raise InvalidRefreshToken("Password reset link is invalid or expired.")
+        revoke_user_refresh_tokens(
+            database,
+            user["_id"],
+            current_time,
+            session=session,
+        )
+        write_security_audit(
+            database,
+            actor_id=user.get("_id"),
+            action="password_reset_confirmed",
+            resource="user",
+            resource_id=user.get("_id"),
+            outcome="success",
+            ip=ip,
+            user_agent=user_agent,
+            now=current_time,
+            session=session,
+        )
     return {"status": "password_reset"}
 
 
