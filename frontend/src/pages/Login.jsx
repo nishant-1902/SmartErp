@@ -1,98 +1,106 @@
 import { useState } from 'react'
+import { yupResolver } from '@hookform/resolvers/yup'
+import { useForm } from 'react-hook-form'
 import { Navigate, useNavigate } from 'react-router-dom'
+import * as yup from 'yup'
+import ErrorMessage from '../components/ErrorMessage.jsx'
+import FormInput from '../components/FormInput.jsx'
+import LoadingSpinner from '../components/LoadingSpinner.jsx'
 import { useAuth } from '../hooks/useAuth.js'
 
-function getErrorMessage(error) {
-  return (
-    error.response?.data?.error?.message ??
-    'Unable to sign in. Check your email and password, then try again.'
-  )
-}
+const loginSchema = yup.object({
+  email: yup
+    .string()
+    .trim()
+    .lowercase()
+    .email('Enter a valid email address.')
+    .required('Email is required.'),
+  password: yup.string().required('Password is required.'),
+})
 
-function Login() {
+const genericLoginError =
+  'Unable to sign in. Check your email and password, then try again.'
+
+/**
+ * Validates credentials with React Hook Form and shows generic auth errors.
+ *
+ * @returns {JSX.Element}
+ */
+export default function Login() {
   const { login, loading, user } = useAuth()
   const navigate = useNavigate()
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [errorMessage, setErrorMessage] = useState('')
-  const [submitting, setSubmitting] = useState(false)
+  const [authError, setAuthError] = useState('')
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm({
+    resolver: yupResolver(loginSchema),
+    defaultValues: { email: '', password: '' },
+  })
 
-  if (!loading && user) {
-    return <Navigate to="/" replace />
+  if (loading) {
+    return (
+      <div className="text-center py-5">
+        <LoadingSpinner label="Checking your session" />
+      </div>
+    )
+  }
+  if (user) {
+    return <Navigate replace to="/" />
   }
 
-  async function handleSubmit(event) {
-    event.preventDefault()
-    setErrorMessage('')
-    setSubmitting(true)
+  async function submitCredentials(values) {
+    setAuthError('')
     try {
-      await login(email, password)
+      await login(values.email, values.password)
       navigate('/', { replace: true })
-    } catch (error) {
-      setErrorMessage(getErrorMessage(error))
-    } finally {
-      setSubmitting(false)
+    } catch {
+      setAuthError(genericLoginError)
     }
   }
 
   return (
-    <main className="container py-5">
-      <div className="row justify-content-center">
-        <div className="col-12 col-md-7 col-lg-5">
-          <section className="card border-0 shadow-sm">
-            <div className="card-body p-4 p-md-5">
-              <p className="text-uppercase text-primary fw-semibold mb-2">
-                SmartERP
-              </p>
-              <h1 className="h3 mb-4">Sign in</h1>
-              <form onSubmit={handleSubmit}>
-                <div className="mb-3">
-                  <label className="form-label" htmlFor="email">
-                    Email
-                  </label>
-                  <input
-                    autoComplete="username"
-                    className="form-control"
-                    id="email"
-                    onChange={(event) => setEmail(event.target.value)}
-                    required
-                    type="email"
-                    value={email}
-                  />
-                </div>
-                <div className="mb-3">
-                  <label className="form-label" htmlFor="password">
-                    Password
-                  </label>
-                  <input
-                    autoComplete="current-password"
-                    className="form-control"
-                    id="password"
-                    onChange={(event) => setPassword(event.target.value)}
-                    required
-                    type="password"
-                    value={password}
-                  />
-                </div>
-                {errorMessage && (
-                  <p className="alert alert-danger" role="alert">
-                    {errorMessage}
-                  </p>
-                )}
-                <button
-                  className="btn btn-primary w-100"
-                  disabled={submitting || loading}
-                  type="submit"
-                >
-                  {submitting ? 'Signing in…' : 'Sign in'}
-                </button>
-              </form>
-            </div>
-          </section>
-        </div>
+    <section aria-labelledby="login-title" className="card auth-card border-0">
+      <div className="card-body p-4 p-md-5">
+        <p className="text-primary text-uppercase fw-bold small mb-2">Welcome back</p>
+        <h1 className="h3 mb-2" id="login-title">Sign in to SmartERP</h1>
+        <p className="text-muted mb-4">Use your work account to continue.</p>
+        <ErrorMessage message={authError} />
+        <form noValidate onSubmit={handleSubmit(submitCredentials)}>
+          <FormInput
+            autoComplete="username"
+            error={errors.email}
+            label="Email"
+            name="email"
+            placeholder="you@company.com"
+            registerProps={register('email')}
+            type="email"
+          />
+          <FormInput
+            autoComplete="current-password"
+            error={errors.password}
+            label="Password"
+            name="password"
+            registerProps={register('password')}
+            type="password"
+          />
+          <button
+            className="btn btn-primary w-100 mt-2 py-2"
+            disabled={isSubmitting || loading}
+            type="submit"
+          >
+            {isSubmitting ? (
+              <span className="d-inline-flex align-items-center gap-2">
+                <LoadingSpinner label="Signing in" size="sm" />
+                Signing in…
+              </span>
+            ) : (
+              'Sign in'
+            )}
+          </button>
+        </form>
       </div>
-    </main>
+    </section>
   )
 }
-
-export default Login

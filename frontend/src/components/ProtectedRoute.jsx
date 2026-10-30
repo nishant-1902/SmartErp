@@ -1,12 +1,22 @@
 import { Navigate, Outlet } from 'react-router-dom'
+import LoadingSpinner from './LoadingSpinner.jsx'
 import { useAuth } from '../hooks/useAuth.js'
 import { hasPermission } from '../utils/permissions.js'
 
+/**
+ * Blocks signed-out users from protected routes.
+ *
+ * @param {{children?: React.ReactNode}} props
+ */
 export function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
 
   if (loading) {
-    return <p className="container py-4" role="status">Restoring your session…</p>
+    return (
+      <div className="min-vh-100 d-grid place-items-center" role="status">
+        <LoadingSpinner label="Restoring your session" />
+      </div>
+    )
   }
   if (!user) {
     return <Navigate to="/login" replace />
@@ -14,6 +24,11 @@ export function ProtectedRoute({ children }) {
   return children ?? <Outlet />
 }
 
+/**
+ * UX-only role and permission guard; backend endpoints remain authoritative.
+ *
+ * @param {{roles?: string[], permission?: string, children?: React.ReactNode}} props
+ */
 export function RoleRoute({ roles, permission, children }) {
   const { role, user } = useAuth()
   const allowed =
@@ -21,7 +36,7 @@ export function RoleRoute({ roles, permission, children }) {
     (!permission || hasPermission(user, permission))
 
   if (!allowed) {
-    return <p className="container py-4" role="alert">You do not have access to this page.</p>
+    return <Navigate replace to="/403" />
   }
   return children ?? <Outlet />
 }

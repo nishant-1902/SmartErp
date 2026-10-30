@@ -1,19 +1,26 @@
+/**
+ * Temporary overview placeholder for the shared authenticated layout.
+ *
+ * @returns {JSX.Element}
+ */
 function Home() {
   return (
-    <main className="container py-5">
-      <div className="card border-0 shadow-sm">
-        <div className="card-body p-4 p-md-5">
-          <p className="text-uppercase text-primary fw-semibold mb-2">
-            SmartERP
-          </p>
-          <h1 className="h2">Welcome to SmartERP</h1>
-          <p className="text-secondary mb-0">
-            The frontend foundation is ready. Sign-in and ERP features will be
-            added in later steps.
-          </p>
-        </div>
+    <section>
+      <div className="page-heading">
+        <p className="text-primary text-uppercase fw-bold small mb-2">Overview</p>
+        <h1>Welcome to SmartERP</h1>
+        <p className="mb-0">
+          The shared interface foundation is ready. Business pages will be added
+          in later steps.
+        </p>
       </div>
-    </main>
+      <div className="surface-card bg-white p-4 p-md-5">
+        <h2 className="h5">Your workspace is ready</h2>
+        <p className="text-muted mb-0">
+          Use the navigation to access features as they become available.
+        </p>
+      </div>
+    </section>
   )
 }
 
