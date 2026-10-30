@@ -26,5 +26,6 @@ urlpatterns = [
     path("api/auth/", include("accounts.urls")),
     path("api/users/", include("accounts.user_urls")),
     path("api/audit-logs/", include("accounts.audit_urls")),
+    path("api/departments/", include("departments.urls")),
     path("", api_root_not_found, name="api-root-not-found"),
 ]
