@@ -3,6 +3,7 @@
 import os
 from pathlib import Path
 
+from corsheaders.defaults import default_headers
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -49,7 +50,10 @@ JWT_REFRESH_TOKEN_LIFETIME_SECONDS = _env_int(
 )
 
 CORS_ALLOWED_ORIGINS = _env_csv("CORS_ALLOWED_ORIGINS")
+if "*" in CORS_ALLOWED_ORIGINS:
+    raise ValueError("CORS_ALLOWED_ORIGINS must contain exact origins, not '*'.")
 CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_HEADERS = (*default_headers, "idempotency-key")
 
 REFRESH_COOKIE_NAME = os.getenv("REFRESH_COOKIE_NAME", "smarterp_refresh")
 REFRESH_COOKIE_SECURE = _env_bool("REFRESH_COOKIE_SECURE")

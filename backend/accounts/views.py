@@ -9,6 +9,7 @@ from pymongo import MongoClient
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
 
 from common.permissions import IsAuthenticatedMongo, require
+from common.permissions_matrix import ROLE_PERMISSIONS
 from accounts.passwords import hash_password, validate_password_strength, verify_password
 from accounts.repository import (
     find_refresh_token_by_hash,
@@ -80,6 +81,15 @@ def get_client_ip(request: Any) -> str:
 def get_user_agent(request: Any) -> str | None:
     """Return the User-Agent header if present."""
     return request.META.get("HTTP_USER_AGENT") or None
+
+
+def _auth_user_payload(user: dict[str, Any]) -> dict[str, Any]:
+    """Include the role's current capability list in authentication responses."""
+    public_user = get_public_user(user)
+    public_user["permissions"] = sorted(
+        ROLE_PERMISSIONS.get(public_user.get("role"), frozenset())
+    )
+    return public_user
 
 
 def build_login_response(data: dict[str, Any], *, refresh_token: str | None = None) -> Any:
@@ -214,7 +224,7 @@ def login_view(request):
             {
                 "access_token": access_token,
                 "token_type": "Bearer",
-                "user": get_public_user(user),
+                "user": _auth_user_payload(user),
             },
             refresh_token=refresh_token,
         )
@@ -260,7 +270,7 @@ def refresh_view(request):
             response = success_response({
                 "access_token": access_token,
                 "token_type": "Bearer",
-                "user": get_public_user(user),
+                "user": _auth_user_payload(user),
             })
             response.set_cookie(
                 key=settings.REFRESH_COOKIE_NAME,
@@ -333,7 +343,7 @@ def me_view(request):
         user = _authenticated_user_document(request)
     except ValueError:
         return error_response("authentication_required", "Authentication required.", status=401)
-    return success_response({"user": get_public_user(user)})
+    return success_response({"user": _auth_user_payload(user)})
 
 
 @api_view(["POST"])
