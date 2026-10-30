@@ -43,6 +43,15 @@ class FakeCollection:
             for document in self.documents.values()
         )
 
+    def distinct(self, field: str, query: dict[str, Any] | None = None) -> list[Any]:
+        """Return unique values for a field, optionally matching a query."""
+        values = {
+            document[field]
+            for document in self.documents.values()
+            if field in document and self._matches(document, query or {})
+        }
+        return list(values)
+
     def update_one(
         self,
         query: dict[str, Any],

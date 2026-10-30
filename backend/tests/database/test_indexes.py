@@ -35,6 +35,7 @@ def test_required_unique_indexes_are_defined():
     required = {
         ("users", ("email",)),
         ("employees", ("employee_code",)),
+        ("employees", ("email",)),
         ("products", ("sku",)),
         ("suppliers", ("code",)),
         ("customers", ("code",)),
