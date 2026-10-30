@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { yupResolver } from '@hookform/resolvers/yup'
 import { useForm } from 'react-hook-form'
-import { Navigate, useNavigate } from 'react-router-dom'
+import Alert from 'react-bootstrap/Alert'
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import * as yup from 'yup'
 import ErrorMessage from '../components/ErrorMessage.jsx'
 import FormInput from '../components/FormInput.jsx'
@@ -28,6 +29,7 @@ const genericLoginError =
  */
 export default function Login() {
   const { login, loading, user } = useAuth()
+  const location = useLocation()
   const navigate = useNavigate()
   const [authError, setAuthError] = useState('')
   const {
@@ -66,6 +68,11 @@ export default function Login() {
         <p className="text-primary text-uppercase fw-bold small mb-2">Welcome back</p>
         <h1 className="h3 mb-2" id="login-title">Sign in to SmartERP</h1>
         <p className="text-muted mb-4">Use your work account to continue.</p>
+        {location.state?.successMessage && (
+          <Alert role="status" variant="success">
+            {location.state.successMessage}
+          </Alert>
+        )}
         <ErrorMessage message={authError} />
         <form noValidate onSubmit={handleSubmit(submitCredentials)}>
           <FormInput
@@ -100,6 +107,9 @@ export default function Login() {
             )}
           </button>
         </form>
+        <p className="mt-3 mb-0 text-center">
+          <Link to="/forgot-password">Forgot your password?</Link>
+        </p>
       </div>
     </section>
   )

@@ -57,6 +57,14 @@ export function applyApiFieldErrors(details, setError) {
     'description',
     'manager_employee_id',
     'is_active',
+    'full_name',
+    'role',
+    'employee_id',
+    'password',
+    'old_password',
+    'new_password',
+    'confirm_password',
+    'token',
   ])
   const remaining = []
 

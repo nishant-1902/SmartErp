@@ -1,6 +1,6 @@
 import { StrictMode } from 'react'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthProvider } from './AuthContext.jsx'
 import { ProtectedRoute } from '../components/ProtectedRoute.jsx'
@@ -38,6 +38,24 @@ function LoginAction() {
       Log in
     </button>
   )
+}
+
+function LocalLogoutAction() {
+  const { logoutLocally } = useAuth()
+  return (
+    <button
+      onClick={() =>
+        logoutLocally({ successMessage: 'Password changed. Sign in again.' })
+      }
+    >
+      Log out locally
+    </button>
+  )
+}
+
+function NavigationMessage() {
+  const location = useLocation()
+  return <p>{location.state?.successMessage}</p>
 }
 
 function renderProvider(children = <AuthStatus />) {
@@ -142,5 +160,30 @@ describe('AuthProvider', () => {
       'new@example.test',
       'password',
     )
+  })
+
+  it('clears local auth state and redirects with a message without calling logout API', async () => {
+    authService.refreshSession.mockRejectedValue(new Error('No refresh cookie'))
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <AuthProvider>
+          <Routes>
+            <Route
+              element={<LocalLogoutAction />}
+              path="/"
+            />
+            <Route element={<NavigationMessage />} path="/login" />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Log out locally' }))
+
+    expect(await screen.findByText('Password changed. Sign in again.'))
+      .toBeInTheDocument()
+    expect(authService.logout).not.toHaveBeenCalled()
+    expect(getAccessToken()).toBeNull()
   })
 })

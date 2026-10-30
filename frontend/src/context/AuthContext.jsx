@@ -105,6 +105,15 @@ export function AuthProvider({ children }) {
     }
   }, [clearSession, navigate])
 
+  const logoutLocally = useCallback(
+    (navigationState = {}) => {
+      clearSession()
+      setLoading(false)
+      navigate('/login', { replace: true, state: navigationState })
+    },
+    [clearSession, navigate],
+  )
+
   const value = useMemo(
     () => ({
       user,
@@ -114,9 +123,10 @@ export function AuthProvider({ children }) {
       loading,
       login,
       logout,
+      logoutLocally,
       hasPermission: (permission) => user?.permissions.includes(permission) ?? false,
     }),
-    [accessToken, loading, login, logout, user],
+    [accessToken, loading, login, logout, logoutLocally, user],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

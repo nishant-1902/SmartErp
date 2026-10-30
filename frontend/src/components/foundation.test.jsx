@@ -1,5 +1,5 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { BrowserRouter } from 'react-router-dom'
 import DashboardCard from './DashboardCard.jsx'
 import DataTable from './DataTable.jsx'
@@ -11,12 +11,18 @@ import Sidebar from './Sidebar.jsx'
 import { ToastProvider } from '../context/ToastContext.jsx'
 import { useToast } from '../hooks/useToast.js'
 
-vi.mock('../hooks/useAuth.js', () => ({
-  useAuth: () => ({
-    user: { permissions: ['departments:read'] },
-    role: 'HR',
-  }),
+const { sidebarAuth } = vi.hoisted(() => ({
+  sidebarAuth: { user: { permissions: ['departments:read'] }, role: 'hr_manager' },
 }))
+
+vi.mock('../hooks/useAuth.js', () => ({
+  useAuth: () => sidebarAuth,
+}))
+
+beforeEach(() => {
+  sidebarAuth.user.permissions = ['departments:read']
+  sidebarAuth.role = 'hr_manager'
+})
 
 afterEach(() => {
   cleanup()
@@ -108,6 +114,26 @@ describe('UI foundation components', () => {
     expect(screen.getByRole('link', { name: /Overview/ })).toBeInTheDocument()
     expect(screen.getByText('Departments')).toBeInTheDocument()
     expect(screen.queryByText('Employees')).not.toBeInTheDocument()
+  })
+
+  it('shows account navigation only when the matching permissions are present', () => {
+    sidebarAuth.role = 'super_admin'
+    sidebarAuth.user.permissions = [
+      'users:manage',
+      'audit:read',
+      'own-profile:read',
+      'own-password:change',
+    ]
+    render(
+      <BrowserRouter>
+        <Sidebar />
+      </BrowserRouter>,
+    )
+
+    expect(screen.getByRole('link', { name: /Users/ })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Audit logs/ })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Profile/ })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Settings/ })).toBeInTheDocument()
   })
 
   it('renders DashboardCard content and ErrorMessage accessibly', () => {

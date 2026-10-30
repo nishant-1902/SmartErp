@@ -12,6 +12,12 @@ const Home = lazy(() => import('./pages/Home.jsx'))
 const Employees = lazy(() => import('./pages/Employees.jsx'))
 const EmployeeProfile = lazy(() => import('./pages/EmployeeProfile.jsx'))
 const Departments = lazy(() => import('./pages/Departments.jsx'))
+const Users = lazy(() => import('./pages/Users.jsx'))
+const Profile = lazy(() => import('./pages/Profile.jsx'))
+const Settings = lazy(() => import('./pages/Settings.jsx'))
+const AuditLogs = lazy(() => import('./pages/AuditLogs.jsx'))
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword.jsx'))
+const ResetPassword = lazy(() => import('./pages/ResetPassword.jsx'))
 const Login = lazy(() => import('./pages/Login.jsx'))
 const NotFound = lazy(() => import('./pages/NotFound.jsx'))
 
@@ -48,11 +54,37 @@ function App() {
             <Routes>
               <Route element={<AuthLayout />}>
                 <Route path="/login" element={<Login />} />
+                <Route path="/forgot-password" element={<ForgotPassword />} />
+                <Route path="/reset-password" element={<ResetPassword />} />
               </Route>
               <Route element={<ProtectedRoute />}>
                 <Route path="/403" element={<Forbidden />} />
                 <Route element={<MainLayout />}>
                   <Route index element={<Home />} />
+                  <Route
+                    element={<RoleRoute permission="own-profile:read" />}
+                    path="profile"
+                  >
+                    <Route index element={<Profile />} />
+                  </Route>
+                  <Route
+                    element={<RoleRoute permission="own-password:change" />}
+                    path="settings"
+                  >
+                    <Route index element={<Settings />} />
+                  </Route>
+                  <Route
+                    element={<RoleRoute permission="users:manage" />}
+                    path="users"
+                  >
+                    <Route index element={<Users />} />
+                  </Route>
+                  <Route
+                    element={<RoleRoute permission="audit:read" />}
+                    path="audit-logs"
+                  >
+                    <Route index element={<AuditLogs />} />
+                  </Route>
                   <Route
                     element={
                       <RoleRoute

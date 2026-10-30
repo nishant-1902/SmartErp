@@ -27,3 +27,18 @@ export async function logout() {
   const response = await apiClient.post('/auth/logout/')
   return responseData(response)
 }
+
+export async function changePassword(values) {
+  const response = await apiClient.post('/auth/change-password/', values)
+  return responseData(response)
+}
+
+export async function requestPasswordReset(email) {
+  const response = await apiClient.post('/auth/password-reset/request/', { email })
+  return responseData(response)
+}
+
+export async function confirmPasswordReset(values) {
+  const response = await apiClient.post('/auth/password-reset/confirm/', values)
+  return responseData(response)
+}
