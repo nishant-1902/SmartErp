@@ -200,9 +200,7 @@ def test_default_drf_settings_use_mongo_auth_and_authenticated_permission():
     assert permission_classes == [IsAuthenticatedMongo]
 
 
-def test_health_and_login_refresh_are_public_but_other_auth_routes_are_protected(
-    client,
-):
+def test_health_login_refresh_and_password_reset_are_public(client):
     with override_settings(ROOT_URLCONF="config.urls"):
         assert client.get("/api/health/").status_code == 200
         assert client.post("/api/auth/login/", {}, format="json").status_code == 400
@@ -219,10 +217,9 @@ def test_health_and_login_refresh_are_public_but_other_auth_routes_are_protected
         assert (
             client.post(
                 "/api/auth/password-reset/request/",
-                {"email": "user@example.test"},
+                {},
                 format="json",
-            ).status_code
-            == 401
+            ).status_code == 400
         )
 
 

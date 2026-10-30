@@ -395,6 +395,8 @@ def change_password_view(request):
 
 
 @api_view(["POST"])
+@authentication_classes([])
+@permission_classes([])
 def password_reset_request_view(request):
     """Request a password reset for an email address; the link is printed in development."""
     serializer = PasswordResetRequestSerializer(data=request.data)
