@@ -19,9 +19,11 @@ export default function DataTable({
   loading = false,
   emptyMessage = 'No records to display.',
   onSort,
+  serverSideSorting = false,
 }) {
   const [sort, setSort] = useState({ key: null, direction: 'asc' })
   const sortedData = useMemo(() => {
+    if (serverSideSorting) return data
     if (!sort.key) return data
     const column = columns.find((item) => item.key === sort.key)
     if (!column) return data
@@ -38,13 +40,13 @@ export default function DataTable({
             })
       return sort.direction === 'asc' ? comparison : -comparison
     })
-  }, [columns, data, sort])
+  }, [columns, data, serverSideSorting, sort])
 
   function handleSort(column) {
     const direction =
       sort.key === column.key && sort.direction === 'asc' ? 'desc' : 'asc'
     setSort({ key: column.key, direction })
-    onSort?.(column.key, direction)
+    onSort?.(column.sortBy ?? column.key, direction)
   }
 
   return (

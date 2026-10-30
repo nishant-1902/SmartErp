@@ -14,14 +14,21 @@ export const navigationItems = [
     path: '/employees',
     icon: '◎',
     requiredPermission: 'employees:read',
-    implemented: false,
+    roles: [
+      'super_admin',
+      'hr_manager',
+      'inventory_manager',
+      'purchase_manager',
+      'sales_manager',
+    ],
+    implemented: true,
   },
   {
     label: 'Departments',
     path: '/departments',
     icon: '▦',
     requiredPermission: 'departments:read',
-    implemented: false,
+    implemented: true,
   },
   {
     label: 'Inventory',

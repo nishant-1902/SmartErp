@@ -3,14 +3,25 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import LoadingSpinner from './components/LoadingSpinner.jsx'
 import { AuthProvider } from './context/AuthContext.jsx'
 import { ToastProvider } from './context/ToastContext.jsx'
-import { ProtectedRoute } from './components/ProtectedRoute.jsx'
+import { ProtectedRoute, RoleRoute } from './components/ProtectedRoute.jsx'
 
 const AuthLayout = lazy(() => import('./layouts/AuthLayout.jsx'))
 const MainLayout = lazy(() => import('./layouts/MainLayout.jsx'))
 const Forbidden = lazy(() => import('./pages/Forbidden.jsx'))
 const Home = lazy(() => import('./pages/Home.jsx'))
+const Employees = lazy(() => import('./pages/Employees.jsx'))
+const EmployeeProfile = lazy(() => import('./pages/EmployeeProfile.jsx'))
+const Departments = lazy(() => import('./pages/Departments.jsx'))
 const Login = lazy(() => import('./pages/Login.jsx'))
 const NotFound = lazy(() => import('./pages/NotFound.jsx'))
+
+const employeeDirectoryRoles = [
+  'super_admin',
+  'hr_manager',
+  'inventory_manager',
+  'purchase_manager',
+  'sales_manager',
+]
 
 /**
  * Declares the lazy-loaded public and authenticated application routes.
@@ -42,6 +53,24 @@ function App() {
                 <Route path="/403" element={<Forbidden />} />
                 <Route element={<MainLayout />}>
                   <Route index element={<Home />} />
+                  <Route
+                    element={
+                      <RoleRoute
+                        permission="employees:read"
+                        roles={employeeDirectoryRoles}
+                      />
+                    }
+                    path="employees"
+                  >
+                    <Route index element={<Employees />} />
+                    <Route path=":employeeId" element={<EmployeeProfile />} />
+                  </Route>
+                  <Route
+                    element={<RoleRoute permission="departments:read" />}
+                    path="departments"
+                  >
+                    <Route index element={<Departments />} />
+                  </Route>
                   <Route path="*" element={<NotFound />} />
                 </Route>
               </Route>
