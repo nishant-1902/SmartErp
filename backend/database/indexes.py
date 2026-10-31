@@ -749,7 +749,7 @@ COLLECTIONS: dict[str, CollectionDefinition] = {
         ),
     ),
     "idempotency_keys": CollectionDefinition(
-        purpose="Deduplication records for retried high-impact operations.",
+        purpose="Deduplication records and replay responses for retryable operations.",
         validator=_schema(
             ("key", "scope", "request_hash", "status", "created_at", "expires_at"),
             {
@@ -764,7 +764,7 @@ COLLECTIONS: dict[str, CollectionDefinition] = {
             },
         ),
         indexes=(
-            _index("uq_idempotency_scope_key", ("key", 1), ("scope", 1), unique=True),
+            _index("uq_idempotency_scope_key", ("scope", 1), ("key", 1), unique=True),
             _index("ttl_idempotency_expiry", ("expires_at", 1), ttl=0),
         ),
     ),

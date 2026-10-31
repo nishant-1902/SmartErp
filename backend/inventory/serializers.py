@@ -5,6 +5,9 @@ from decimal import Decimal
 
 from rest_framework import serializers
 
+from common.exceptions import ValidationFailed
+from common.object_id import parse_object_id
+
 
 class StrictSerializer(serializers.Serializer):
     """Reject undeclared or unsafe request keys."""
@@ -194,3 +197,92 @@ class ProductLowStockQuerySerializer(ProductListQuerySerializer):
 
 class ProductCategoriesQuerySerializer(StrictSerializer):
     """Reject unrecognized query parameters on the categories endpoint."""
+
+
+class StockAdjustmentSerializer(StrictSerializer):
+    """Validate a stock adjustment request body."""
+
+    product_id = serializers.CharField(trim_whitespace=True)
+    quantity_change = serializers.IntegerField()
+    reason = serializers.CharField(min_length=3, max_length=500, trim_whitespace=True)
+
+    def to_internal_value(self, data):
+        """Reject booleans rather than treating them as integer stock deltas."""
+        if isinstance(data, Mapping):
+            quantity_change = data.get("quantity_change")
+            if isinstance(quantity_change, bool):
+                raise serializers.ValidationError(
+                    {"quantity_change": "Must be a non-zero integer."}
+                )
+        return super().to_internal_value(data)
+
+    def validate_product_id(self, value):
+        """Parse product IDs before passing them to a service or query."""
+        try:
+            return parse_object_id(value)
+        except ValidationFailed as exc:
+            raise serializers.ValidationError("Must be a valid ObjectId.") from exc
+
+    def validate_quantity_change(self, value):
+        """Reject no-op adjustments."""
+        if value == 0:
+            raise serializers.ValidationError("Must be a non-zero integer.")
+        return value
+
+
+class StockMovementsQuerySerializer(StrictSerializer):
+    """Validate stock movement filters and pagination."""
+
+    page = serializers.IntegerField(min_value=1, required=False, default=1)
+    page_size = serializers.IntegerField(min_value=1, max_value=100, required=False, default=20)
+    product = serializers.CharField(required=False, trim_whitespace=True)
+    type = serializers.ChoiceField(
+        choices=(
+            "purchase_receipt",
+            "sale_fulfilment",
+            "sale_return",
+            "adjustment",
+            "reservation",
+            "reservation_release",
+        ),
+        required=False,
+    )
+    start_date = serializers.DateTimeField(required=False)
+    end_date = serializers.DateTimeField(required=False)
+    user = serializers.CharField(required=False, trim_whitespace=True)
+
+    def validate_product(self, value):
+        """Parse the optional product filter ObjectId."""
+        try:
+            return parse_object_id(value)
+        except ValidationFailed as exc:
+            raise serializers.ValidationError("Must be a valid ObjectId.") from exc
+
+    def validate_user(self, value):
+        """Parse the optional actor filter ObjectId."""
+        try:
+            return parse_object_id(value)
+        except ValidationFailed as exc:
+            raise serializers.ValidationError("Must be a valid ObjectId.") from exc
+
+    def validate_start_date(self, value):
+        """Require an explicit timezone on movement date filters."""
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise serializers.ValidationError("Must include a timezone.")
+        return value
+
+    def validate_end_date(self, value):
+        """Require an explicit timezone on movement date filters."""
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise serializers.ValidationError("Must include a timezone.")
+        return value
+
+    def validate(self, attrs):
+        """Reject date ranges whose end precedes their start."""
+        start = attrs.get("start_date")
+        end = attrs.get("end_date")
+        if start is not None and end is not None and end < start:
+            raise serializers.ValidationError(
+                {"end_date": "Must be greater than or equal to start_date."}
+            )
+        return attrs

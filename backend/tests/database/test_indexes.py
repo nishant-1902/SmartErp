@@ -43,7 +43,7 @@ def test_required_unique_indexes_are_defined():
         ("sales_orders", ("order_number",)),
         ("invoices", ("invoice_number",)),
         ("purchase_receipts", ("receipt_reference",)),
-        ("idempotency_keys", ("key", "scope")),
+        ("idempotency_keys", ("scope", "key")),
     }
     defined = {
         (collection_name, tuple(field for field, _ in index.keys))
@@ -102,6 +102,10 @@ def test_workflow_documents_include_required_inventory_and_order_fields():
     assert "status_history" in purchase_fields
     assert "min_stock_level" in product_fields
     assert {"quantity_change", "reserved_change", "performed_by"} <= movement_fields
+    movement_properties = COLLECTIONS["stock_movements"].validator["$jsonSchema"][
+        "properties"
+    ]
+    assert movement_properties["reserved_change"]["bsonType"] == ["int", "long"]
     assert {"return_status", "payment_status", "status_history"} <= sales_fields
 
 

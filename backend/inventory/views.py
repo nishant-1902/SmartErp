@@ -8,6 +8,7 @@ from django.core.exceptions import ImproperlyConfigured
 from pymongo import MongoClient
 from rest_framework.decorators import api_view, permission_classes
 
+from common.idempotency import normalize_idempotency_key
 from common.object_id import parse_object_id
 from common.pagination import Pagination, parse_pagination
 from common.permissions import IsAuthenticatedMongo, has_permission
@@ -19,12 +20,16 @@ from inventory.serializers import (
     ProductListQuerySerializer,
     ProductLowStockQuerySerializer,
     ProductPatchSerializer,
+    StockAdjustmentSerializer,
+    StockMovementsQuerySerializer,
 )
 from inventory.services import (
+    adjust_stock,
     create_product,
     get_product,
     list_categories,
     list_products,
+    list_stock_movements,
     update_product,
 )
 
@@ -145,3 +150,50 @@ def product_categories_view(request):
     with mongo_database() as database:
         categories = list_categories(database)
     return success_response({"categories": categories})
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticatedMongo])
+def stock_adjustments_view(request):
+    """Apply one idempotent on-hand quantity adjustment."""
+    if not has_permission(request.user, "stock:adjust"):
+        return _permission_denied("stock:adjust")
+    values = _validated_request(StockAdjustmentSerializer, request.data)
+    key = normalize_idempotency_key(request.headers.get("Idempotency-Key"))
+    with mongo_database() as database:
+        result = adjust_stock(
+            database,
+            product_id=values["product_id"],
+            quantity_change=values["quantity_change"],
+            reason=values["reason"],
+            user_id=parse_object_id(request.user.id),
+            idempotency_key=key,
+        )
+    return success_response(result, status=201)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticatedMongo])
+def stock_movements_view(request):
+    """Return a paginated, newest-first append-only stock movement list."""
+    if not has_permission(request.user, "stock:read"):
+        return _permission_denied("stock:read")
+    filters = _validated_request(
+        StockMovementsQuerySerializer,
+        request.query_params,
+    )
+    pagination = parse_pagination(
+        filters.get("page"),
+        filters.get("page_size"),
+    )
+    with mongo_database() as database:
+        movements, meta = list_stock_movements(
+            database,
+            product_id=filters.get("product"),
+            movement_type=filters.get("type"),
+            start_date=filters.get("start_date"),
+            end_date=filters.get("end_date"),
+            user_id=filters.get("user"),
+            pagination=pagination,
+        )
+    return success_response({"stock_movements": movements}, meta=meta)

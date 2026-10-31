@@ -81,6 +81,14 @@ class DuplicateOperation(ConflictError):
     default_code = "duplicate_operation"
 
 
+class IdempotencyKeyReuse(ApplicationError):
+    """Raised when an idempotency key is reused for a different request body."""
+
+    status_code = 422
+    default_detail = "This Idempotency-Key was already used with a different request."
+    default_code = "idempotency_key_reused"
+
+
 def api_exception_handler(
     exc: Exception,
     context: dict[str, Any],

@@ -1,12 +1,16 @@
 """PyMongo data access for product catalogue records."""
 
 from collections.abc import Mapping
+from datetime import datetime
 import re
 from typing import Any
 
 from bson import ObjectId
+from pymongo import ReturnDocument
+from pymongo.client_session import ClientSession
 from pymongo.database import Database
 
+from common.exceptions import InsufficientStock
 from common.money import to_decimal128
 from common.object_id import parse_object_id
 from common.time import utc_now
@@ -274,3 +278,141 @@ def public_product_fields(document: Mapping[str, Any]) -> dict[str, Any]:
             if field in document
         },
     }
+
+
+def apply_stock_update(
+    database: Database[Any],
+    session: ClientSession,
+    *,
+    product_id: ObjectId,
+    quantity_delta: int,
+    reserved_delta: int,
+    movement_type: str,
+) -> dict[str, Any]:
+    """Atomically update product stock using availability-specific conditions."""
+    query: dict[str, Any] = {"_id": product_id}
+    if movement_type == "sale_fulfilment":
+        quantity = abs(quantity_delta)
+        query["quantity_on_hand"] = {"$gte": quantity}
+        query["reserved_quantity"] = {"$gte": quantity}
+    elif movement_type == "reservation_release":
+        query["reserved_quantity"] = {"$gte": abs(reserved_delta)}
+    else:
+        available_required = max(0, -quantity_delta) + max(0, reserved_delta)
+        if available_required:
+            query["$expr"] = {
+                "$gte": [
+                    {
+                        "$subtract": [
+                            "$quantity_on_hand",
+                            "$reserved_quantity",
+                        ]
+                    },
+                    available_required,
+                ]
+            }
+        if reserved_delta < 0:
+            query["reserved_quantity"] = {"$gte": abs(reserved_delta)}
+
+    updated = database["products"].find_one_and_update(
+        query,
+        {
+            "$inc": {
+                "quantity_on_hand": quantity_delta,
+                "reserved_quantity": reserved_delta,
+            },
+            "$set": {"updated_at": utc_now()},
+        },
+        return_document=ReturnDocument.AFTER,
+        session=session,
+    )
+    if updated is None:
+        raise InsufficientStock()
+    return updated
+
+
+def insert_stock_movement(
+    database: Database[Any],
+    session: ClientSession,
+    *,
+    movement: dict[str, Any],
+) -> dict[str, Any]:
+    """Insert a stock movement within the stock update's transaction."""
+    result = database["stock_movements"].insert_one(movement, session=session)
+    return {"_id": result.inserted_id, **movement}
+
+
+def _stock_movement_query(
+    *,
+    product_id: ObjectId | None,
+    movement_type: str | None,
+    start_date: datetime | None,
+    end_date: datetime | None,
+    user_id: ObjectId | None,
+) -> dict[str, Any]:
+    """Build a stock movement query from serializer-validated filters."""
+    query: dict[str, Any] = {}
+    if product_id is not None:
+        query["product_id"] = product_id
+    if movement_type is not None:
+        query["movement_type"] = movement_type
+    if user_id is not None:
+        query["performed_by"] = user_id
+    if start_date is not None or end_date is not None:
+        created_at: dict[str, Any] = {}
+        if start_date is not None:
+            created_at["$gte"] = start_date
+        if end_date is not None:
+            created_at["$lte"] = end_date
+        query["created_at"] = created_at
+    return query
+
+
+def list_stock_movements(
+    database: Database[Any],
+    *,
+    product_id: ObjectId | None,
+    movement_type: str | None,
+    start_date: datetime | None,
+    end_date: datetime | None,
+    user_id: ObjectId | None,
+    skip: int,
+    limit: int,
+) -> list[dict[str, Any]]:
+    """Return one newest-first page of matching immutable stock movements."""
+    return list(
+        database["stock_movements"]
+        .find(
+            _stock_movement_query(
+                product_id=product_id,
+                movement_type=movement_type,
+                start_date=start_date,
+                end_date=end_date,
+                user_id=user_id,
+            )
+        )
+        .sort([("created_at", -1), ("_id", -1)])
+        .skip(skip)
+        .limit(limit)
+    )
+
+
+def count_stock_movements(
+    database: Database[Any],
+    *,
+    product_id: ObjectId | None,
+    movement_type: str | None,
+    start_date: datetime | None,
+    end_date: datetime | None,
+    user_id: ObjectId | None,
+) -> int:
+    """Count movements matching the same validated filters as the list query."""
+    return database["stock_movements"].count_documents(
+        _stock_movement_query(
+            product_id=product_id,
+            movement_type=movement_type,
+            start_date=start_date,
+            end_date=end_date,
+            user_id=user_id,
+        )
+    )

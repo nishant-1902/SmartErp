@@ -3,32 +3,48 @@
 from copy import deepcopy
 import re
 from types import SimpleNamespace
+from threading import RLock
 from typing import Any, Iterable, Iterator
 
 from bson import ObjectId
+from pymongo import ReturnDocument
+from pymongo.errors import DuplicateKeyError
 
 
 class FakeCollection:
     """Implement the MongoDB operations used by account repositories."""
 
-    def __init__(self) -> None:
+    def __init__(self, unique_fields: tuple[tuple[str, ...], ...] = ()) -> None:
         self.documents: dict[Any, dict[str, Any]] = {}
+        self.unique_fields = unique_fields
+        self.lock = RLock()
 
     def insert_one(self, document: dict[str, Any], **kwargs: Any) -> SimpleNamespace:
-        stored = deepcopy(document)
-        inserted_id = stored.setdefault("_id", ObjectId())
-        self.documents[inserted_id] = stored
-        return SimpleNamespace(inserted_id=inserted_id)
+        with self.lock:
+            stored = deepcopy(document)
+            for fields in self.unique_fields:
+                values = tuple(stored.get(field) for field in fields)
+                if any(
+                    tuple(existing.get(field) for field in fields) == values
+                    for existing in self.documents.values()
+                ):
+                    raise DuplicateKeyError(
+                        f"Duplicate fake unique key for fields {fields!r}."
+                    )
+            inserted_id = stored.setdefault("_id", ObjectId())
+            self.documents[inserted_id] = stored
+            return SimpleNamespace(inserted_id=inserted_id)
 
     def find_one(
         self,
         query: dict[str, Any],
         **kwargs: Any,
     ) -> dict[str, Any] | None:
-        for document in self.documents.values():
-            if self._matches(document, query):
-                return deepcopy(document)
-        return None
+        with self.lock:
+            for document in self.documents.values():
+                if self._matches(document, query):
+                    return deepcopy(document)
+            return None
 
     def find(self, query: dict[str, Any], **kwargs: Any) -> "FakeCursor":
         return FakeCursor(
@@ -38,10 +54,11 @@ class FakeCollection:
         )
 
     def count_documents(self, query: dict[str, Any], **kwargs: Any) -> int:
-        return sum(
-            self._matches(document, query)
-            for document in self.documents.values()
-        )
+        with self.lock:
+            return sum(
+                self._matches(document, query)
+                for document in self.documents.values()
+            )
 
     def distinct(self, field: str, query: dict[str, Any] | None = None) -> list[Any]:
         """Return unique values for a field, optionally matching a query."""
@@ -60,20 +77,40 @@ class FakeCollection:
         upsert: bool = False,
         **kwargs: Any,
     ) -> SimpleNamespace:
-        for document in self.documents.values():
-            if self._matches(document, query):
+        with self.lock:
+            for document in self.documents.values():
+                if self._matches(document, query):
+                    self._apply(document, update)
+                    return SimpleNamespace(matched_count=1)
+            if upsert:
+                document = {
+                    key: value
+                    for key, value in query.items()
+                    if not key.startswith("$") and not isinstance(value, dict)
+                }
                 self._apply(document, update)
-                return SimpleNamespace(matched_count=1)
-        if upsert:
-            document = {
-                key: value
-                for key, value in query.items()
-                if not key.startswith("$") and not isinstance(value, dict)
-            }
-            self._apply(document, update)
-            self.insert_one(document)
-            return SimpleNamespace(matched_count=0, upserted_id=document["_id"])
-        return SimpleNamespace(matched_count=0)
+                self.insert_one(document)
+                return SimpleNamespace(matched_count=0, upserted_id=document["_id"])
+            return SimpleNamespace(matched_count=0)
+
+    def find_one_and_update(
+        self,
+        query: dict[str, Any],
+        update: dict[str, Any],
+        *,
+        return_document: ReturnDocument = ReturnDocument.BEFORE,
+        **kwargs: Any,
+    ) -> dict[str, Any] | None:
+        """Atomically match, update, and return a fake document."""
+        with self.lock:
+            for document in self.documents.values():
+                if self._matches(document, query):
+                    before = deepcopy(document)
+                    self._apply(document, update)
+                    if return_document == ReturnDocument.AFTER:
+                        return deepcopy(document)
+                    return before
+            return None
 
     def update_many(
         self,
@@ -116,6 +153,8 @@ class FakeCollection:
                     for operand in operands
                 )
                 if operator == "$lte" and not left <= right:
+                    return False
+                if operator == "$gte" and not left >= right:
                     return False
                 if operator == "$gt" and not left > right:
                     return False
@@ -189,4 +228,11 @@ class FakeDatabase:
         self.collections: dict[str, FakeCollection] = {}
 
     def __getitem__(self, collection_name: str) -> FakeCollection:
-        return self.collections.setdefault(collection_name, FakeCollection())
+        if collection_name not in self.collections:
+            unique_fields = (
+                (("scope", "key"),)
+                if collection_name == "idempotency_keys"
+                else ()
+            )
+            self.collections[collection_name] = FakeCollection(unique_fields)
+        return self.collections[collection_name]
