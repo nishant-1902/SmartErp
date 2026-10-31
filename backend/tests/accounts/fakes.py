@@ -109,6 +109,17 @@ class FakeCollection:
                 if not any(cls._matches(document, clause) for clause in expected):
                     return False
                 continue
+            if key == "$expr":
+                operator, operands = next(iter(expected.items()))
+                left, right = (
+                    cls._expression_value(document, operand)
+                    for operand in operands
+                )
+                if operator == "$lte" and not left <= right:
+                    return False
+                if operator == "$gt" and not left > right:
+                    return False
+                continue
             actual = document.get(key)
             if isinstance(expected, dict):
                 for operator, value in expected.items():
@@ -128,6 +139,18 @@ class FakeCollection:
             if actual != expected:
                 return False
         return True
+
+    @classmethod
+    def _expression_value(cls, document: dict[str, Any], expression: Any) -> Any:
+        if isinstance(expression, str) and expression.startswith("$"):
+            return document.get(expression[1:])
+        if isinstance(expression, dict) and "$subtract" in expression:
+            left, right = (
+                cls._expression_value(document, operand)
+                for operand in expression["$subtract"]
+            )
+            return left - right
+        return expression
 
 
 class FakeCursor:

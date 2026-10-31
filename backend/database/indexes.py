@@ -3,6 +3,8 @@
 from dataclasses import dataclass
 from typing import Any
 
+from bson.decimal128 import Decimal128
+
 
 @dataclass(frozen=True)
 class IndexDefinition:
@@ -222,8 +224,8 @@ COLLECTIONS: dict[str, CollectionDefinition] = {
                 "description": {"bsonType": ["string", "null"]},
                 "category": {"bsonType": "string", "minLength": 1, "maxLength": 100},
                 "unit": {"bsonType": "string", "minLength": 1, "maxLength": 30},
-                "cost_price": {"bsonType": "decimal", "minimum": 0},
-                "selling_price": {"bsonType": "decimal", "minimum": 0},
+                "cost_price": {"bsonType": "decimal", "minimum": Decimal128("0.01")},
+                "selling_price": {"bsonType": "decimal", "minimum": Decimal128("0.01")},
                 "quantity_on_hand": {"bsonType": ["int", "long"], "minimum": 0},
                 "reserved_quantity": {"bsonType": ["int", "long"], "minimum": 0},
                 "min_stock_level": {"bsonType": ["int", "long"], "minimum": 0},
