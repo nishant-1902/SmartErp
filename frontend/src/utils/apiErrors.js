@@ -65,6 +65,15 @@ export function applyApiFieldErrors(details, setError) {
     'new_password',
     'confirm_password',
     'token',
+    'sku',
+    'category',
+    'unit',
+    'cost_price',
+    'selling_price',
+    'min_stock_level',
+    'quantity_change',
+    'reason',
+    'product_id',
   ])
   const remaining = []
 

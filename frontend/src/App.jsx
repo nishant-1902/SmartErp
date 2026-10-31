@@ -12,6 +12,10 @@ const Home = lazy(() => import('./pages/Home.jsx'))
 const Employees = lazy(() => import('./pages/Employees.jsx'))
 const EmployeeProfile = lazy(() => import('./pages/EmployeeProfile.jsx'))
 const Departments = lazy(() => import('./pages/Departments.jsx'))
+const Products = lazy(() => import('./pages/Products.jsx'))
+const ProductDetail = lazy(() => import('./pages/ProductDetail.jsx'))
+const Inventory = lazy(() => import('./pages/Inventory.jsx'))
+const StockMovements = lazy(() => import('./pages/StockMovements.jsx'))
 const Users = lazy(() => import('./pages/Users.jsx'))
 const Profile = lazy(() => import('./pages/Profile.jsx'))
 const Settings = lazy(() => import('./pages/Settings.jsx'))
@@ -102,6 +106,30 @@ function App() {
                     path="departments"
                   >
                     <Route index element={<Departments />} />
+                  </Route>
+                  <Route
+                    element={<RoleRoute permission="products:read" />}
+                    path="products"
+                  >
+                    <Route index element={<Products />} />
+                    <Route
+                      element={<RoleRoute permission="stock:read" />}
+                      path=":productId"
+                    >
+                      <Route index element={<ProductDetail />} />
+                    </Route>
+                  </Route>
+                  <Route
+                    element={<RoleRoute permission="stock:read" />}
+                    path="inventory"
+                  >
+                    <Route index element={<Inventory />} />
+                  </Route>
+                  <Route
+                    element={<RoleRoute permission="stock:read" />}
+                    path="stock-movements"
+                  >
+                    <Route index element={<StockMovements />} />
                   </Route>
                   <Route path="*" element={<NotFound />} />
                 </Route>

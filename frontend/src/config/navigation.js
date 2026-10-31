@@ -59,11 +59,25 @@ export const navigationItems = [
     implemented: true,
   },
   {
+    label: 'Products',
+    path: '/products',
+    icon: '◇',
+    requiredPermission: 'products:read',
+    implemented: true,
+  },
+  {
     label: 'Inventory',
     path: '/inventory',
-    icon: '◇',
-    requiredPermission: 'inventory:read',
-    implemented: false,
+    icon: '▦',
+    requiredPermission: 'stock:read',
+    implemented: true,
+  },
+  {
+    label: 'Stock movements',
+    path: '/stock-movements',
+    icon: '↔',
+    requiredPermission: 'stock:read',
+    implemented: true,
   },
   {
     label: 'Sales',

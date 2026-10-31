@@ -1115,3 +1115,70 @@
 ### Next step
 
 - Configure the isolated replica-set test database, initialize the updated validators/indexes, and run stock adjustment and concurrent transaction integration tests against MongoDB. Wire future purchase/sales workflows through `apply_stock_change`.
+
+## Inventory React pages
+
+### Files created
+
+- `frontend/src/components/ProductFormModal.jsx` — shared create/edit form for catalogue fields; keeps SKU immutable during edits and never submits stock quantities.
+- `frontend/src/components/ProductFormModal.test.jsx` — verifies uppercase SKU creation and that edit requests exclude SKU and stock quantities.
+- `frontend/src/components/StockAdjustmentModal.jsx` — validates stock adjustment inputs, creates one UUID idempotency key per submit, and disables submission while pending.
+- `frontend/src/components/StockAdjustmentModal.test.jsx` — covers request payload/key, pending state, and invalid quantity rejection.
+- `frontend/src/pages/Products.jsx` — searchable, filterable, paginated product list with create/edit and activate/deactivate flows.
+- `frontend/src/pages/Products.test.jsx` — checks product display and the confirmed deactivation request.
+- `frontend/src/pages/ProductDetail.jsx` — product metadata, stock summary, explicit available/reserved quantities, and paginated movement history.
+- `frontend/src/pages/Inventory.jsx` — inventory list with available-stock low-stock highlighting and the adjustment modal.
+- `frontend/src/pages/Inventory.test.jsx` — tests low-stock display and idempotent adjustment wiring.
+- `frontend/src/pages/StockMovements.jsx` — paginated movement log with type, product, user, and inclusive date range filters.
+- `frontend/src/pages/StockMovements.test.jsx` — verifies encoded filter values and local rejection of malformed ObjectIds.
+- `frontend/src/services/productService.js` — typed-by-contract API wrappers for product and movement endpoints, including the idempotency header.
+- `frontend/src/services/productService.test.js` — verifies API paths, response data, movement filters, and `Idempotency-Key`.
+- `frontend/src/utils/formatMoney.js` — formats backend decimal strings with `Intl.NumberFormat` and `BigInt`, avoiding floating-point money arithmetic.
+- `frontend/src/utils/formatMoney.test.js` — covers large precision-safe, localized, negative/zero, and invalid amount handling.
+
+### Files modified
+
+- `frontend/src/App.jsx` — registered product, product detail, inventory, and stock movement routes behind their read permissions.
+- `frontend/src/config/navigation.js` — added the new inventory links and aligned Inventory with `stock:read`.
+- `frontend/src/utils/apiErrors.js` — maps product and stock adjustment validation fields to form errors.
+- `docs/PROGRESS.md` — recorded this implementation and its verification.
+
+### Dependencies installed
+
+- None. Existing React, React-Bootstrap, React Hook Form, Yup, Vitest, and shared UI utilities are reused.
+
+### Features completed
+
+- Product list provides name/SKU search, category and active-state filters, pagination, sorting, status badges, and an exact-string currency display.
+- Product create/edit form validates catalogue fields; creation normalizes SKU to uppercase, editing does not submit SKU, and neither operation exposes stock quantity fields.
+- Product activation/deactivation uses a confirmation dialog and the existing product update endpoint.
+- Product details display on-hand, reserved, and available stock, low-stock status, price, metadata, and movement history; authorized users can adjust stock.
+- Inventory lists stock quantities and highlights low stock using `quantity_on_hand - reserved_quantity <= min_stock_level`. Adjustments use a newly generated UUID key and disable the submit control until the request finishes.
+- Stock movement log provides product ObjectId, movement type, user ObjectId, and date range filters with server pagination. The product detail displays its ObjectId for use in this filter.
+- Currency display uses strings, `BigInt`, and `Intl.NumberFormat`; no monetary amount is converted to a floating-point number.
+
+### Commands run and observed
+
+- `Set-Location frontend; npm test -- src/utils/formatMoney.test.js src/services/productService.test.js src/components/ProductFormModal.test.jsx src/components/StockAdjustmentModal.test.jsx src/pages/Products.test.jsx` — 5 test files passed, 11 tests passed.
+- `Set-Location frontend; npm test -- src/pages/Inventory.test.jsx` — 1 test file passed, 1 test passed after wrapping the page in its required router during test setup.
+- `Set-Location frontend; npm test` — 21 test files passed, 68 tests passed.
+- `Set-Location frontend; npm run lint` — passed with no warnings on the final run.
+- `Set-Location frontend; npm run build` — passed; Vite transformed 372 modules and produced the production bundles.
+- `git diff --check` — passed with no output.
+
+### Tests passed
+
+- Full frontend suite: 68 tests passed.
+- Frontend lint: passed.
+- Production build: passed.
+- Diff whitespace check: passed.
+
+### Known problems
+
+- UI calls were validated with mocked service responses; no live authenticated API session or MongoDB-backed frontend workflow was available in this step.
+- Movement filters accept product and user MongoDB ObjectIds. Product IDs are displayed on Product Detail; users need a valid user ID to filter by actor.
+- Role checks in routes/navigation are user-experience guards only; backend permissions remain authoritative.
+
+### Next step
+
+- Exercise the new pages against a configured authenticated backend, then continue integrating purchase and sales workflows through the stock engine.
