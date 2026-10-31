@@ -30,6 +30,10 @@
 - `docs/mongodb-local-setup.md` — Windows installation, single-node replica-set, local user, key-file, connection, service, backup/restore, and debugging instructions.
 - `backend/common/responses.py`, `exceptions.py`, `object_id.py`, `sanitize.py`, `serialization.py`, `money.py`, `pagination.py`, and `time.py` — shared API response/error, MongoDB input, document serialization, money, pagination, and UTC helpers.
 - `backend/tests/common/test_responses.py`, `test_exceptions.py`, `test_object_id.py`, `test_sanitize.py`, `test_serialization.py`, `test_money.py`, `test_pagination.py`, and `test_time.py` — unit tests for the shared helpers.
+- `backend/common/management/__init__.py` and `backend/common/management/commands/__init__.py` — Django management-command packages.
+- `backend/common/management/commands/init_db.py` — idempotent MongoDB collection, validator, and index initializer.
+- `backend/tests/database/__init__.py`, `test_indexes.py`, and `test_init_db.py` — schema-definition and command tests using an in-memory fake database.
+- `backend/database/indexes.py` — 17 collection purposes, MongoDB JSON Schema validators, and named index definitions.
 
 ## Files modified
 
@@ -46,6 +50,7 @@
 - `backend/.env.example` — changed `MONGO_URI` to the `smarterp_app` replica-set URI shape with a URL-encoded password placeholder.
 - `docs/PROGRESS.md` — recorded the local MongoDB setup work and actual validation results.
 - `backend/config/settings.py` — configured DRF to use the common API exception handler.
+- `docs/database-design.md` — replaced the TODO with collection contracts, examples, fields, indexes, query patterns, relationship decisions, and duplicate cleanup guidance.
 
 ## Dependencies installed
 
@@ -178,6 +183,57 @@
 
 - Follow `docs/mongodb-local-setup.md` locally with Administrator access, install the missing shell/tools, and finish the replica-set and authentication steps. Stop there; backend integration is a separate next step and has not been started.
 
+## 2026-10-28 — MongoDB collection schemas and initializer
+
+### Files created
+
+- `backend/database/indexes.py` — declarative purposes, `$jsonSchema` validators, and workload indexes for the 17 requested collections.
+- `backend/common/management/__init__.py` and `backend/common/management/commands/__init__.py` — make the Django management command importable.
+- `backend/common/management/commands/init_db.py` — `init_db` command to ping configured MongoDB, create missing collections, apply strict/error validators to existing collections, and idempotently ensure indexes while reporting each action.
+- `backend/tests/database/__init__.py`, `backend/tests/database/test_indexes.py`, and `backend/tests/database/test_init_db.py` — tests for collection coverage, required unique and TTL indexes, validator calls, idempotency, command registration, and missing Mongo URI handling.
+
+### Files modified
+
+- `docs/database-design.md` — replaced the TODO with the collection-by-collection field contracts, full BSON examples, indexes, queries, relationship/embedding rationale, search decision, duplicate-key handling, and safe unique-index rollout steps.
+- `docs/PROGRESS.md` — recorded implementation and validation results.
+
+### Dependencies installed
+
+- None. Existing PyMongo and Django dependencies provide all required functionality.
+
+### Commands run and observed
+
+- From `backend\`, `.\venv\Scripts\python.exe -m pytest -q` — `69 passed in 0.83s`.
+- `.\backend\venv\Scripts\python.exe .\backend\manage.py check` — `System check identified no issues (0 silenced).`
+- From `backend\`, `.\venv\Scripts\python.exe manage.py help init_db` — Django discovered and displayed the command's help and options.
+- From `backend\`, `.\venv\Scripts\python.exe manage.py init_db` — returned `CommandError: MONGO_URI is not configured.`; no `backend/.env` is configured, so the real MongoDB server was not modified.
+- `git diff --check` — passed.
+
+### Features completed
+
+- Declared purpose, validation schema, and indexes for users, employees, departments, products, stock movements, suppliers, purchase orders, purchase receipts, customers, sales orders, payments, invoices, audit logs, refresh tokens, login attempts, idempotency keys, and counters.
+- Added compound indexes for documented relationship/status/time list patterns, partial unique indexes for optional employee links, customer tax IDs, and payment references, and TTL cleanup indexes for ephemeral authentication/idempotency data.
+- Chose escaped anchored prefix search against lowercase normalized name fields instead of a text index; documented normalization, trade-offs, and sample query shape.
+- Added repeatable collection creation/`collMod` and index creation with clear terminal output. The command does not seed data or remove existing records/indexes.
+- Documented that unique-index creation on existing collections can fail on duplicates, how to find/resolve those duplicates safely, and how duplicate-key errors should map to non-leaking API conflicts.
+
+### Tests passed
+
+- Backend unit tests: 69 passed.
+- Django system check: passed.
+- `init_db` command registration/help: passed.
+- `git diff --check`: passed.
+
+### Known problems
+
+- The real `init_db` operation has not been run against MongoDB because `MONGO_URI` is unset and no local `backend/.env` exists. The local MongoDB service was previously observed to be standalone, not the configured replica set.
+- `validationLevel: "strict"` and `validationAction: "error"` are applied to existing collections; legacy documents are not rewritten. Existing invalid documents may make later updates fail, and duplicate data can cause unique-index creation to fail. Review/clean legacy data before production use.
+- Schema validators do not enforce foreign-key existence, lowercase normalization behavior, transaction boundaries, role permissions, or business totals. Serializers/services must enforce those rules.
+
+### Next step
+
+- Configure the local MongoDB replica set and credentials as described in `docs/mongodb-local-setup.md`, set `MONGO_URI` in an ignored `backend/.env`, review legacy duplicates/data, then run `python manage.py init_db`. Do not start repository/business API integration until that setup is complete.
+
 ## 2026-10-28 — Shared backend common helpers
 
 ### Files created
@@ -235,3 +291,827 @@
 ### Next step
 
 - Complete the previously documented local MongoDB replica-set setup. These common helpers do not themselves connect to MongoDB or implement application endpoints.
+
+## 2026-10-28 — Pytest MongoDB test infrastructure
+
+### Files created
+
+- `backend/tests/conftest.py` — safe real-MongoDB session setup, per-test cleanup, DRF client, user/auth-header factories, and department/product/supplier/customer seed factories.
+- `backend/tests/test_test_database_safety.py` — tests that reject unsafe MongoDB test connection settings without connecting to a database.
+
+### Files modified
+
+- `backend/config/settings.py` — added `MONGO_TEST_URI` and fixed-default `MONGO_TEST_DB_NAME`.
+- `backend/.env.example` — added a placeholder-only test connection URI and database name; no real password is included.
+- `backend/pytest.ini` — registered the `slow_transaction` marker.
+- `backend/common/management/commands/init_db.py` — skip `collMod` when an existing collection's validator is already current, so an ordinary test user can repeat initialization without needing schema-administration privileges.
+- `backend/tests/database/test_init_db.py` — verify unchanged validators are left alone and stale validators are updated.
+- `backend/tests/database/test_indexes.py` — account for `counters` using MongoDB's built-in unique `_id` index instead of requiring a redundant declared index.
+- `docs/testing.md` — added test setup, run/coverage commands, fixture overview, marker guidance, and traceback reading help.
+- `docs/PROGRESS.md` — recorded this implementation and validation.
+
+### Dependencies installed
+
+- None. Existing pytest, pytest-django, pytest-cov, PyMongo, and Django packages were sufficient.
+
+### Commands run and observed
+
+- From `backend\`, `.\venv\Scripts\python.exe -m pytest -q` — `81 passed in 0.51s`.
+- From `backend\`, `.\venv\Scripts\python.exe -m pytest --cov=. --cov-report=term-missing` — `81 passed in 1.54s`; reported total coverage was 85%.
+- `.\venv\Scripts\python.exe manage.py check` — `System check identified no issues (0 silenced).`
+- `.\venv\Scripts\python.exe manage.py help init_db` — Django displayed the registered command help.
+- `.\venv\Scripts\python.exe -m pytest --markers` — confirmed `slow_transaction` is registered.
+- `git diff --check` — passed with no output.
+- Configuration probe (printed no URI or credentials) — `MONGO_TEST_URI configured: False`; `MONGO_TEST_DB_NAME is fixed: True`.
+
+### Features completed
+
+- The session fixture refuses any database name other than `smarterp_test`, requires the `smarterp_test_user`, local `localhost:27017`, `authSource=smarterp_test`, and `replicaSet=rs0`, and verifies that the connected replica-set member is the writable primary before initialization or cleanup.
+- The fixture uses a real PyMongo client, invokes `init_db`, and clears documents at session end. The function-scoped `mongo_db` fixture clears documents around each database-backed test while retaining collection definitions and indexes.
+- Added reusable API client, role-based user/JWT header factories, and schema-conforming seed factories. Test JWTs use a test-only signing key.
+- Documented PowerShell commands for the full suite, one file, one test, and coverage, plus simple traceback guidance.
+
+### Tests passed
+
+- Backend suite: 81 passed.
+- Coverage run: 81 passed; total measured coverage 85%.
+- Django system check and `init_db` command discovery: passed.
+- `slow_transaction` marker registration: passed.
+- `git diff --check`: passed.
+
+### Known problems
+
+- A local `backend/.env` exists, but it does not configure `MONGO_TEST_URI`. Therefore the real MongoDB fixture, `init_db` against the dedicated test account, and any real transaction tests were not run. No MongoDB integration success is claimed.
+- No transaction integration tests exist yet; the custom marker is ready for them. Configure the local replica set and test URI before running database-backed tests.
+- If an existing collection's validator differs from the declared schema, `init_db` must issue `collMod`; the restricted test account may not have that privilege. Apply schema changes with an appropriately privileged local administrator, then rerun the suite with the dedicated test user.
+- The auth-header fixture is test scaffolding only; production authentication and API routes are not implemented yet.
+
+### Next step
+
+- Complete the previously documented local replica-set setup and configure `MONGO_TEST_URI` in the ignored local `backend/.env`. Then run a database-backed test and add the transaction tests in their planned step.
+
+## 2026-10-29 — MongoDB-backed account foundations
+
+### Files created
+
+- `backend/accounts/repository.py` — user and refresh-token PyMongo operations, email normalization, allowlisted updates, ObjectId validation, and token-version invalidation.
+- `backend/accounts/passwords.py` — standalone Django hasher wrappers and password-strength checks.
+- `backend/accounts/tokens.py` — HS256 access-token creation and strict JWT validation.
+- `backend/accounts/services.py` — opaque refresh-token creation, rotation, 10-second race handling, and reuse-triggered family revocation.
+- `backend/accounts/management/__init__.py`, `backend/accounts/management/commands/__init__.py`, and `backend/accounts/management/commands/create_superuser_mongo.py` — interactive super-admin creation command.
+- `backend/tests/accounts/fakes.py` — small in-memory PyMongo-shaped test helpers.
+- `backend/tests/accounts/test_passwords.py`, `test_tokens.py`, `test_refresh_tokens.py`, `test_repository.py`, and `test_management_command.py` — unit tests for hashing/strength, JWT validation, refresh rotation/reuse, repository behavior, and the management command.
+
+### Files modified
+
+- `backend/database/indexes.py` — made required account fields explicit in the users and refresh-token collection validators.
+- `backend/tests/database/test_indexes.py` — checks the required account-document fields.
+- `docs/database-design.md` — aligned required-field and refresh-token rotation/grace-window documentation with the implementation.
+- `docs/PROGRESS.md` — recorded the account implementation and validation results.
+
+### Dependencies installed
+
+- None. Existing pinned Django/Argon2, PyMongo, and PyJWT dependencies cover the implementation.
+
+### Commands run and observed
+
+- Initial `.\venv\Scripts\python.exe -m pytest -q tests\accounts` from the repository root — failed because that relative virtual-environment path does not exist from the root; no tests ran.
+- Initial focused run using the correct backend interpreter — `20 passed, 1 failed`; the token round-trip fixture used a fixed timestamp in the past. The test now uses current UTC time.
+- `.\backend\venv\Scripts\python.exe -m pytest -q .\backend\tests\accounts .\backend\tests\database\test_indexes.py` — `28 passed in 2.21s`.
+- `.\backend\venv\Scripts\python.exe -m pytest -q .\backend\tests` — `104 passed in 2.27s`.
+- `.\backend\venv\Scripts\python.exe .\backend\manage.py check` — `System check identified no issues (0 silenced).`
+- `.\backend\venv\Scripts\python.exe .\backend\manage.py help create_superuser_mongo` — Django displayed the command help and options.
+- `git diff --check` — passed with no output.
+- Pylance diagnostics — no implementation errors; the Django command override has informational unused-`args`/`options` notices, and the workspace environment still reports `pytest` unresolved in test files although the backend virtual-environment tests pass.
+
+### Features completed
+
+- Users are saved with normalized email and the requested account fields; the optional employee link is validated as an ObjectId.
+- User password changes and deactivation increment `token_version`; deactivation is a conditional update.
+- Password hashes use the configured Argon2-first/PBKDF2-fallback Django hashers; password verification and rehash checks do not use Django's user model or ORM.
+- Access JWTs use HS256, have a 15-minute default lifetime, carry only the specified identity/authorization/session claims, and validate signature, expiry, issuer, audience, type, and claim structure.
+- Refresh tokens contain 256 bits of random entropy; only the SHA-256 digest is persisted. Rotation uses a conditional update, detects theft reuse and revokes the family, and grants the immediately previous active replacement a 10-second `REFRESH_RACE` grace response without revocation.
+- `create_superuser_mongo` interactively collects email, name, password, and confirmation; it validates password strength and writes through the accounts repository.
+
+### Tests passed
+
+- Account and schema-focused tests: 28 passed.
+- Full backend test suite: 104 passed.
+- Django system check and management-command discovery/help: passed.
+- `git diff --check`: passed.
+
+### Known problems
+
+- No live MongoDB integration was run. Existing test setup has no configured `MONGO_TEST_URI`; account tests use in-memory fake collections. The management command was tested with a fake Mongo client and was not run against a live database.
+- Authentication endpoints, refresh-cookie transport, and request authentication that compares JWT `token_version` with the current MongoDB user are not implemented in this step.
+- The Pylance workspace interpreter does not resolve `pytest`, while `backend\venv` runs the tests successfully.
+
+### Next step
+
+- Configure the previously documented local MongoDB replica set and test account, then wire these account foundations into the authentication API and HttpOnly refresh-cookie flow. Stop here until the next step is requested.
+
+## 2026-10-29 — MongoDB JWT authentication and role permissions
+
+### Files created
+
+- `backend/accounts/authentication.py` — DRF bearer-token authentication that validates JWTs, reloads the user through the MongoDB repository on each request, and rejects inactive users or stale `token_version` claims.
+- `backend/accounts/urls.py` — routes the existing auth views under `/api/auth/`.
+- `backend/common/permissions_matrix.py` — single role-to-permission mapping from the confirmed requirements matrix.
+- `backend/common/permissions.py` — safe authenticated-user permission checks and the `require("permission:name")` DRF class factory.
+- `backend/tests/accounts/test_authentication.py` — isolated API tests for token rejection, status codes, the full role matrix against a protected sample endpoint, and public/protected auth routes.
+
+### Files modified
+
+- `backend/config/settings.py` — set Mongo JWT authentication and authenticated-only DRF defaults.
+- `backend/config/urls.py` — added the public health endpoint and auth URL include.
+- `backend/common/views.py` — added a public liveness response.
+- `backend/accounts/views.py` — kept login/refresh public and applied authentication plus matrix permissions to protected profile/password operations.
+- `docs/PROGRESS.md` — recorded this implementation and verification.
+
+### Dependencies installed
+
+- None. Existing Django REST Framework, PyMongo, and PyJWT dependencies were reused.
+
+### Commands run and observed
+
+- Final focused auth tests: `16 passed in 0.46s`.
+- Full backend test suite: `120 passed in 3.30s`.
+- `.\backend\venv\Scripts\python.exe .\backend\manage.py check` — `System check identified no issues (0 silenced).`
+- `git diff --check` — passed with no output.
+- An initial test/check run exposed a DRF import cycle from eager repository imports in the authentication backend. The repository/token imports were made lazy; the final full-suite and system-check runs passed.
+
+### Features completed
+
+- DRF checks the HS256 access token and loads the matching MongoDB user on every protected request. Inactive users and `token_version` mismatches are rejected.
+- `AuthUser` exposes only id, email, role, permissions, and the expected authentication flags.
+- Missing/invalid/expired tokens return 401; authenticated users without the endpoint capability receive 403.
+- The permission matrix matches the six defined roles and includes conditional purchase-approval capability grants.
+- Health, login, and refresh routes are public. Logout, profile, password change, and password-reset routes use the default authenticated policy; profile/password change also require their named permissions.
+- Permission checks handle `request.user is None` without raising an attribute error.
+
+### Tests passed
+
+- Authentication focused tests: 16 passed.
+- Final complete backend tests: 120 passed.
+- Django system check and URL import: passed.
+- `git diff --check`: passed.
+
+### Known problems
+
+- No live MongoDB integration was run. Authentication tests use an in-memory PyMongo-shaped database because `MONGO_TEST_URI` is not configured.
+- The health endpoint is a liveness response only; it does not check MongoDB readiness.
+- The matrix grants capabilities. Employee access to only their own linked employee record and purchase approval separation-of-duties rules must also be enforced in their future service/view implementations.
+- Business-module endpoints are not implemented or permission-wired in this step.
+
+### Next step
+
+- When business-module APIs are added, apply `IsAuthenticatedMongo` plus the matching `require(...)` permission and enforce record-level ownership/workflow conditions in services. Configure the local test MongoDB before attempting live integration validation.
+
+## 2026-10-29 — User administration and audit-log APIs
+
+### Files created
+
+- `backend/accounts/user_urls.py` — user list/detail and activate/deactivate/reset-password routes.
+- `backend/accounts/audit_urls.py` — audit-log list route.
+- `backend/tests/accounts/test_user_management.py` — API and service tests for user management, permission checks, last-Super-Admin protection, audit filters, reset-token consumption, and secret-field protection.
+
+### Files modified
+
+- `backend/accounts/repository.py` — validated user/audit list queries, counts, activation, refresh-token revocation, guarded Super Admin mutations, and conditional reset-token consumption.
+- `backend/accounts/serializers.py` — strict request/query serializers for user create/update/list and audit-log filters.
+- `backend/accounts/services.py` — transactional user lifecycle, last-active-Super-Admin checks, audit writes for user-list, user-detail, and audit-log reads, admin reset issuance, and token-gated reset confirmation.
+- `backend/accounts/views.py` — user and audit endpoints protected by `users:manage` or `audit:read`; validated reset confirmation is accessible without a bearer token.
+- `backend/config/urls.py` — mounted `/api/users/` and `/api/audit-logs/`.
+- `backend/database/indexes.py` — added audit action/date and date indexes for audit filters.
+- `backend/tests/accounts/fakes.py` — added the repository query, cursor, and update behavior needed for isolated API tests.
+- `backend/tests/accounts/test_authentication.py` — verifies the reset-confirm route accepts requests without bearer authentication and validates through its reset token.
+- `backend/tests/database/test_indexes.py` — asserts audit filter index definitions.
+- `docs/database-design.md` — documented indexes supporting user/action/date audit queries.
+- `docs/PROGRESS.md` — recorded this implementation and validation results.
+
+### Dependencies installed
+
+- None. Existing Django REST Framework, PyMongo, PyJWT, and password hashing dependencies were reused.
+
+### Commands run and observed
+
+- Focused management tests after read-audit coverage: `.\backend\venv\Scripts\python.exe -m pytest -q .\backend\tests\accounts\test_user_management.py` — `13 passed in 5.51s`.
+- Final complete backend test suite: `.\backend\venv\Scripts\python.exe -m pytest -q .\backend\tests` — `134 passed in 5.22s`.
+- `.\backend\venv\Scripts\python.exe .\backend\manage.py check` — `System check identified no issues (0 silenced).`
+- Pylance diagnostics for `accounts/repository.py`, `accounts/services.py`, and `accounts/views.py` — no diagnostics.
+- `git diff --check` — passed with no output.
+
+### Features completed
+
+- `GET/POST /api/users/`, `GET/PATCH /api/users/{id}/`, and activate/deactivate/admin-reset POST endpoints are mounted under `/api/users/`.
+- User-management endpoints require authenticated users with `users:manage`; audit-log listing requires `audit:read`.
+- User listing has bounded pagination, escaped case-insensitive email/name search, and validated role/active filters.
+- User create/update bodies reject undeclared, dotted, or `$`-prefixed keys. Roles are restricted to the repository's six allowed roles.
+- User API responses serialize Mongo values safely and never include password hashes or reset-token hashes.
+- Deactivation refuses self-deactivation, protects the last active Super Admin, increments `token_version`, revokes refresh tokens, and audits the result.
+- Demoting the last active Super Admin is also blocked. A shared transactional counter serializes those checks; account, refresh-token, and audit updates use MongoDB transactions when connected to the replica set.
+- Create, update, activate, deactivate, admin reset, denied self/last-admin changes, and successful user-list, user-detail, and audit-log reads write audit events.
+- Audit logs support actor/affected-user, action, inclusive date-range, and pagination filters.
+- Admin reset issues a SHA-256-hashed, 15-minute one-time reset token and audits who requested it. In development the link is printed to the console. Reset confirmation can be submitted without a bearer token, but the one-time token is mandatory; consumption, password update, token-version increment, refresh-token revocation, and audit write are performed together.
+- Reset links are not printed outside `DEBUG`; requests fail explicitly until production email delivery is configured.
+
+### Tests passed
+
+- User-management cases include role escalation denial, undeclared/secret-field rejection, pagination/search, last active Super Admin demotion/deactivation prevention, self-deactivation refusal, token revocation, reset link completion without bearer auth, replay denial, audit filtering, and audit entries for successful user and audit reads.
+- Full backend test suite: 134 passed.
+- Django system check and Pylance diagnostics for changed application source: passed.
+- `git diff --check`: passed.
+
+### Known problems
+
+- No live MongoDB integration test was run because `MONGO_TEST_URI` is not configured. Transaction and write-conflict behavior therefore remains unverified against the local replica set.
+- Production password-reset email delivery is not implemented. With `DEBUG=False`, reset-link issuance fails explicitly rather than printing a bearer-equivalent secret to production logs.
+- The general password-reset request endpoint remains protected by the global bearer-token policy; this step exposes only reset confirmation by its one-time token.
+- User name/email search uses escaped substring regex; it is safe from regex injection but may scan larger collections. Add a normalized search field or a search index if usage warrants it.
+
+### Next step
+
+- Configure the dedicated MongoDB test URI and replica set, then run account-management transaction tests against MongoDB. Configure a production mail provider before enabling password-reset link delivery outside development.
+
+## 2026-10-30 — Department API
+
+### Files created
+
+- `backend/departments/serializers.py` — strict serializers for department create/update and department/employee list queries.
+- `backend/departments/repository.py` — validated PyMongo reads/writes, uniqueness lookups, search, pagination, sorting, active-employee counting, and safe employee-directory projections.
+- `backend/departments/services.py` — department business rules, active manager validation, duplicate checks, deactivation guard, transaction boundary, and JSON-safe result formatting.
+- `backend/departments/urls.py` — department list/create, employee list, and detail routes; fixed `employees/` route is declared before the ObjectId detail route.
+- `backend/tests/departments/test_department_api.py` — isolated API tests for permissions, validation, uniqueness, manager rules, search/sort/pagination, deactivation, and response field safety.
+- `docs/postman/departments.postman_collection.json` — ten successful and negative Postman requests, with configurable bearer-token variables.
+
+### Files modified
+
+- `backend/departments/views.py` — implemented authenticated API handlers and request-scoped PyMongo access.
+- `backend/config/urls.py` — mounted `/api/departments/`.
+- `docs/api-documentation.md` — documented each department endpoint in the required method/URL/purpose/role/body/response/validation/status format.
+- `docs/PROGRESS.md` — recorded this implementation and validation results.
+
+### Dependencies installed
+
+- None. Existing Django REST Framework, PyMongo, and BSON dependencies were reused.
+
+### Commands run and observed
+
+- `.\backend\venv\Scripts\python.exe -m pytest -q .\backend\tests\departments` — `14 passed in 0.55s` before the final manager-PATCH case was added.
+- `.\backend\venv\Scripts\python.exe -m pytest -q .\backend\tests` — `149 passed in 12.21s`.
+- `.\backend\venv\Scripts\python.exe .\backend\manage.py check` — `System check identified no issues (0 silenced).`
+- Parsed `docs\postman\departments.postman_collection.json` with Python — `Valid Postman JSON: SmartERP Departments (10 requests)`.
+- `git diff --check` — passed with no output.
+
+### Features completed
+
+- Implemented `GET/POST /api/departments/`, `GET/PATCH /api/departments/{id}/`, and `GET /api/departments/{id}/employees/`.
+- Applied matrix permissions: department reads for Super Admin, HR, Inventory Manager, Purchase Manager, and Sales Manager; department writes for HR and Super Admin. Existing permission matrix entries already matched, so that file was not changed.
+- Added case-insensitive unique department names, uppercase normalized unique codes, optional active-employee manager links, strict unknown/unsafe input rejection, ObjectId validation, and standard response envelopes.
+- Added bounded pagination, escaped literal case-insensitive search, active filtering, and whitelisted sort fields for departments and employee lists.
+- Prevented department deactivation while active employees reference it; deactivation check and update use a MongoDB transaction when supported.
+- Returned only department public fields and allowlisted employee-directory fields. No hard-delete route was added.
+- Reused the department schema and unique indexes already declared in `backend/database/indexes.py`; no index changes were needed.
+
+### Tests passed
+
+- Full backend test suite: 149 passed.
+- Django system check: passed.
+- Postman collection JSON parse: passed, ten requests loaded.
+- `git diff --check`: passed.
+
+### Known problems
+
+- Live MongoDB integration and transaction behavior were not run because no `MONGO_TEST_URI` is configured. Deactivation's cross-collection transaction requires the configured MongoDB replica set.
+- The Postman collection requires a configured `base_url` and role-appropriate `access_token`; the negative deactivation example additionally requires an active employee assigned to the department.
+- No dependencies were installed.
+
+### Next step
+
+- Configure the local test MongoDB replica set and `MONGO_TEST_URI`, then run the API/Postman scenarios against the real test database.
+
+## 2026-10-30 — Employee API
+
+### Files created
+
+- `backend/employees/serializers.py` — strict serializers for employee create/PATCH and list query validation, including email, phone, ObjectId, status, and joining-date rules.
+- `backend/employees/repository.py` — PyMongo employee reads/writes, uniqueness normalization, escaped search, filtering, pagination, sorting, public projections, and distinct designations.
+- `backend/employees/services.py` — employee business rules, active-department validation, current-user profile lookup, transaction-backed audit logging, and response formatting.
+- `backend/employees/urls.py` — routes for list/create, `me/`, `designations/`, and employee detail; fixed routes precede the ObjectId route.
+- `backend/tests/employees/test_employee_api.py` — employee API tests for validation, duplicates, department links, permissions, self-profile scope, pagination, auditing, and deactivation.
+- `docs/postman/employees.postman_collection.json` — twelve success and negative employee API requests.
+
+### Files modified
+
+- `backend/employees/views.py` — implemented authenticated employee API handlers and request-scoped PyMongo access.
+- `backend/config/urls.py` — mounted `/api/employees/`.
+- `backend/tests/accounts/fakes.py` — added `distinct()` support for isolated designation endpoint tests.
+- `backend/tests/database/test_indexes.py` — asserts that employee email has its required unique index.
+- `docs/api-documentation.md` — documented employee endpoints and linked both employee and department Postman collections.
+- `docs/PROGRESS.md` — recorded this implementation and validation results.
+
+### Dependencies installed
+
+- None. Existing Django REST Framework, PyMongo, and BSON dependencies were reused.
+
+### Commands run and observed
+
+- `.\backend\venv\Scripts\python.exe -m pytest -q .\backend\tests\employees` — `26 passed in 0.53s`.
+- Final `.\backend\venv\Scripts\python.exe -m pytest -q .\backend\tests` — `175 passed in 13.37s`.
+- `.\backend\venv\Scripts\python.exe .\backend\manage.py check` — `System check identified no issues (0 silenced).`
+- Parsed both JSON collections in `docs\postman` — `Valid Postman JSON: departments.postman_collection.json (10 requests)` and `Valid Postman JSON: employees.postman_collection.json (12 requests)`.
+- `git diff --check` — passed with no output.
+- Python line-length check on new employee source/tests — `Python lines over 99 characters: 0`.
+
+### Features completed
+
+- Implemented `GET/POST /api/employees/`, `GET/PATCH/DELETE /api/employees/{id}/`, `GET /api/employees/me/`, and `GET /api/employees/designations/`.
+- Placed `me/` and `designations/` before the detail route, as required.
+- Enforced employees read/write matrix permissions; Employee-role users can read their linked profile only through `/me/` or their matching detail ID.
+- Stored employee codes uppercase, emails lowercase, phone numbers normalized after validation, and joining dates as UTC BSON datetimes. Joining dates after the current UTC date are rejected.
+- Enforced unique code/email, active department references on create and reassignment/reactivation, status choices, strict body/query keys, immutable employee codes on PATCH, bounded pagination, escaped search, field filters, and whitelisted sorting.
+- `DELETE` changes status to inactive and retains the document.
+- Successful creates, PATCHes, and actual deactivations write an audit log in the same MongoDB transaction when transaction support is available.
+- The employee collection already had the required unique indexes and BSON schema; its existing indexes were retained.
+
+### Tests passed
+
+- Complete backend suite: 175 passed.
+- Django system check: passed.
+- Both Postman collection JSON files parsed successfully.
+- `git diff --check`: passed.
+
+### Known problems
+
+- Live MongoDB integration and transaction behavior were not run because `MONGO_TEST_URI` is not configured. Employee writes/audit log writes use MongoDB transactions when connected to the configured replica set.
+- The Postman collection requires `base_url`, HR/Super Admin `access_token`, Employee `employee_access_token`, and an active `department_id`. Its inactive-department negative request must be given an inactive department ID.
+- Phone validation accepts 7–15 digits, optionally prefixed by `+`, with common formatting separators; phone data is stored without separators.
+
+### Next step
+
+- Configure the local test MongoDB replica set and `MONGO_TEST_URI`, then run employee API and Postman scenarios against the real test database.
+
+## 2026-10-30 — Frontend authentication
+
+### Files created
+
+- `frontend/src/services/authService.js` — login, refresh, current-user, and logout API operations.
+- `frontend/src/context/AuthContext.jsx` and `frontend/src/context/authContext.js` — in-memory authentication state and context; boot session restoration shares one module-level promise across React StrictMode effects.
+- `frontend/src/hooks/useAuth.js` — validated access to authentication context.
+- `frontend/src/components/ProtectedRoute.jsx` — signed-in route guard and role/permission route guard; comments clarify these are UX checks, not security boundaries.
+- `frontend/src/utils/permissions.js` — frontend permission-check helper.
+- `frontend/src/pages/Login.jsx` — sign-in form and client-safe error display.
+- `frontend/src/services/apiClient.test.js` — tests bearer/X-Requested-With headers, in-memory token behavior, one shared refresh for concurrent 401s, retry limits, and auth failure cleanup.
+- `frontend/src/context/AuthContext.test.jsx` — tests StrictMode session restore, failure behavior, protected-route redirect, and login token/permission state.
+- `backend/tests/accounts/test_frontend_auth_contract.py` — tests auth permission payload and credentialed CORS preflight headers.
+
+### Files modified
+
+- `frontend/src/services/apiClient.js` — memory-only bearer token, credentialed requests, refresh queue, one-time retries, and login redirect/session clearing after refresh failure.
+- `frontend/src/App.jsx` — added the authentication provider, login route, and protected home route.
+- `backend/config/settings.py` — rejects wildcard CORS origin configuration and allows the standard CORS headers plus `idempotency-key`; credentials remain enabled.
+- `backend/.env.example` — documents that CORS origins must be explicit, not wildcard.
+- `backend/accounts/views.py` — includes the backend role-matrix permissions in login, refresh, and current-user auth payloads.
+- `docs/authentication.md` — documents token lifecycle, StrictMode restore, CORS/preflight, credential cookies, and troubleshooting.
+- `docs/PROGRESS.md` — recorded this implementation and validation results.
+
+### Dependencies installed
+
+- None. Existing React, Axios, Vitest, Django, and django-cors-headers dependencies were reused.
+
+### Commands run and observed
+
+- Initial frontend/backend commands were launched from the repository root and failed because their package/venv files live in `frontend/` and `backend/`; reran from the correct working directories.
+- Initial focused frontend test run: `1 failed, 7 passed`; the refresh-route assertion counted the explicitly invoked refresh request itself. Corrected the assertion to verify the route was called exactly once and reran.
+- `npm test -- --run src/services/apiClient.test.js src/context/AuthContext.test.jsx` from `frontend\` — `2 passed`, `10 passed`.
+- Final `npm run lint` from `frontend\` — passed with no warnings.
+- Final `npm run build` from `frontend\` — passed; Vite transformed 91 modules and built `dist/`.
+- Final `npm test` from `frontend\` — `3 passed`, `11 passed in 2.92s`.
+- `.\\venv\\Scripts\\python.exe -m pytest -q tests\\accounts\\test_frontend_auth_contract.py` from `backend\` — `2 passed in 0.20s`.
+- Final `.\\venv\\Scripts\\python.exe -m pytest -q tests` from `backend\` — `177 passed in 9.00s`.
+- `.\\venv\\Scripts\\python.exe manage.py check` from `backend\` — `System check identified no issues (0 silenced).`
+
+### Features completed
+
+- Access token exists only in React memory state and the API-client module variable. No persistent browser storage is used.
+- Login, refresh, logout, and current-user calls use the existing API envelope and HttpOnly refresh-cookie flow.
+- Axios attaches the in-memory bearer token and `X-Requested-With`; `withCredentials` allows the browser to send/receive the refresh cookie.
+- Concurrent protected-request 401s share one refresh promise. Login/refresh requests are excluded, original requests retry once, and failed refresh/retry clears auth state and redirects to `/login`.
+- App boot silently refreshes and then loads `/auth/me/`; duplicate StrictMode effects share one refresh promise. A failed boot restore leaves the user signed out without redirect loops.
+- Auth payloads provide permissions directly from the backend role matrix. Route/permission guards are UX only; backend permission checks remain authoritative.
+- Backend CORS uses exact origins from `CORS_ALLOWED_ORIGINS`, rejects `*`, enables credentials, and permits authorization, content-type, x-requested-with, and idempotency-key headers.
+- Explained CORS preflight and HttpOnly cookie behavior in simple English in `docs/authentication.md`.
+
+### Tests passed
+
+- Complete frontend test suite: 11 passed, including 10 authentication-specific tests.
+- Frontend lint: passed with no warnings.
+- Frontend production build: passed.
+- Complete backend test suite: 177 passed.
+- Django system check: passed.
+- Credentialed CORS preflight contract test: passed.
+
+### Known problems
+
+- Browser-level end-to-end testing against a running frontend and configured backend was not performed. CORS was verified with Django's test client; actual refresh cookies require local environment configuration.
+- Set exact `CORS_ALLOWED_ORIGINS` in `backend/.env`, `VITE_API_BASE_URL` in `frontend/.env`, and appropriate secure/SameSite cookie settings for production.
+- The home screen remains a placeholder protected page; no authenticated ERP dashboard or logout control is included in this auth step.
+
+### Next step
+
+- Configure the local MongoDB replica set, backend/frontend environment files, and browser cookie settings; then verify login, reload restore, refresh retry, and logout end-to-end in a browser.
+
+## 2026-10-30 — UI foundation
+
+### Files created
+
+- `frontend/src/assets/styles.css` — SmartERP colors, spacing, responsive layout, and soft-shadow component styling.
+- `frontend/src/config/navigation.js` — navigation link configuration with permission requirements and implementation status.
+- `frontend/src/components/Navbar.jsx`, `Sidebar.jsx`, `DashboardCard.jsx`, `DataTable.jsx`, `SearchBar.jsx`, `Pagination.jsx`, `LoadingSpinner.jsx`, `ErrorMessage.jsx`, `ConfirmDialog.jsx`, `FormInput.jsx`, and `ModalWrapper.jsx` — individually documented reusable UI components.
+- `frontend/src/components/foundation.test.jsx` — tests shared table, form, search, sidebar, dashboard, alert, pagination, and toast behavior.
+- `frontend/src/context/ToastContext.jsx` and `frontend/src/context/toastContext.js` — app toast provider and its context.
+- `frontend/src/hooks/useToast.js` — toast actions hook.
+- `frontend/src/layouts/AuthLayout.jsx` and `MainLayout.jsx` — responsive login and authenticated layouts.
+- `frontend/src/pages/NotFound.jsx` and `Forbidden.jsx` — 404 and 403 pages.
+
+### Files modified
+
+- `frontend/package.json` and `frontend/package-lock.json` — aligned `react-router-dom` with the requested v6 API (`^6.30.6`).
+- `frontend/src/App.jsx` — lazy-loaded public/protected routes and toast provider.
+- `frontend/src/main.jsx` and `frontend/src/index.css` — load Bootstrap and the new UI theme.
+- `frontend/src/components/ProtectedRoute.jsx` — use the shared loading UI and route denied users to the 403 page.
+- `frontend/src/pages/Login.jsx` — React Hook Form + Yup validation, generic error, and submit state.
+- `frontend/src/pages/Home.jsx` — neutral overview placeholder inside the new application shell; no business feature page added.
+- `frontend/src/components/SearchBar.jsx` — keeps callback identity from restarting its debounce and avoids an initial empty search.
+- `docs/PROGRESS.md` — recorded this implementation and validation.
+
+### Dependencies installed
+
+- No new library added. Changed the existing `react-router-dom` dependency from v7 to `^6.30.6`, as requested; `npm install` reported one package added, two removed, and two changed.
+- `npm install` reported two moderate audit vulnerabilities. They were not force-fixed because that could introduce unrelated dependency changes.
+
+### Commands run and observed
+
+- `npm install react-router-dom@^6.30.1` from `frontend\` — completed; resolved version verified as `react-router-dom@6.30.6`.
+- Initial `npm test` — one new sorting test failed because Vitest globals were not configured to auto-cleanup Testing Library renders. Added explicit cleanup to the test and reran.
+- Final `npm test` from `frontend\` — `Test Files 4 passed (4); Tests 19 passed (19); Duration 5.22s`.
+- Final `npm run lint` from `frontend\` — passed with no warnings.
+- Final `npm run build` from `frontend\` — passed; Vite transformed 317 modules and built the production bundle in 899ms.
+- Final `git diff --check` — passed. Git reported expected LF-to-CRLF normalization notices for the package manifests and `main.jsx`.
+- Browser smoke check: login and form validation displayed; a mocked authenticated session showed the permission-filtered desktop sidebar, account menu, and mobile offcanvas menu. The real backend was not running, so this was not an end-to-end authentication test.
+
+### Features completed
+
+- Added the requested AuthLayout and MainLayout with a responsive Bootstrap offcanvas sidebar on mobile.
+- Added navbar user menu/logout, permission-filtered navigation config, and all requested reusable components.
+- Added JSDoc to the reusable components and layouts.
+- Login uses React Hook Form and Yup, displays validation feedback accessibly, shows a generic authentication error, and prevents duplicate submission while loading.
+- Added toast context/hook, NotFound and Forbidden pages, and lazy-loaded React Router v6 routes.
+- Added consistent colors, spacing, cards, and soft shadows without adding business pages.
+
+### Tests passed
+
+- Frontend tests: 19 passed.
+- Frontend lint: passed with no warnings.
+- Frontend production build: passed.
+- Browser smoke check: desktop shell, mobile menu, and login validation displayed as expected.
+
+### Known problems
+
+- Employee, department, inventory, and sales links are permission-filtered but intentionally disabled until those business pages are implemented.
+- Real API login, cookies, and logout were not tested because the backend was not running/configured in this browser session.
+- The package install reported two moderate audit vulnerabilities; dependency audit/fixes are outside this UI-foundation step.
+
+### Next step
+
+- Wait for approval before starting a business page; the UI foundation is complete.
+
+## 2026-10-30 — Employee and department API pages
+
+### Files created
+
+- `frontend/src/services/employeeService.js` — employee list, detail, create, update, deactivation, and designation API calls.
+- `frontend/src/services/departmentService.js` — department list, detail, create, update, and department employee-list API calls.
+- `frontend/src/hooks/usePaginatedList.js` — shared debounced, abortable, server-side pagination, filters, sorting, and refetch behavior.
+- `frontend/src/utils/apiErrors.js` — extracts standard backend error envelopes and maps field details to React Hook Form.
+- `frontend/src/components/EmployeeFormModal.jsx` and `DepartmentFormModal.jsx` — create/edit forms with Yup validation matching backend field limits and formats.
+- `frontend/src/components/DepartmentEmployeesModal.jsx` — server-paginated department employee list.
+- `frontend/src/components/EmployeeProfileDetails.jsx` — abortable employee profile detail and authorized edit/deactivation actions.
+- `frontend/src/pages/Employees.jsx`, `EmployeeProfile.jsx`, and `Departments.jsx` — employee directory, profile route, and department administration pages.
+- `frontend/src/services/backendServices.test.js` — verifies endpoint paths, request bodies, cancellation signals, and response envelope unwrapping.
+- `frontend/src/hooks/usePaginatedList.test.jsx` — verifies search debounce and stale-request cancellation.
+- `frontend/src/components/EmployeeFormModal.test.jsx` and `DepartmentFormModal.test.jsx` — validates required fields, backend conflict messages, field errors, and active manager options.
+- `frontend/src/pages/Employees.test.jsx` — verifies API-backed loading, permission-gated actions, allowlisted server sorting, and backend 403 display.
+
+### Files modified
+
+- `frontend/src/App.jsx` — added lazy-loaded employee list/profile and department routes with read-permission and employee-directory role guards.
+- `frontend/src/components/DataTable.jsx` — supports server-side sorting and backend sort field aliases.
+- `frontend/src/config/navigation.js` — enabled the employee and department navigation items and restricted employee-directory visibility to directory-capable roles.
+- `docs/PROGRESS.md` — recorded implementation and final validation.
+
+### Dependencies installed
+
+- None. Existing Axios, React Hook Form, Yup, React-Bootstrap, and Bootstrap dependencies were reused.
+
+### Commands run and observed
+
+- Initial `npm run lint` identified effect-state/ref warnings; revised the paginated hook and async loaders. Final lint is warning-free.
+- Initial full test run: 2 failures in new tests (a missing test import and modal query ambiguity), corrected; the hook test exposed the expected backend uppercase normalization, which the form now applies before submit.
+- Targeted `npm test -- --run src/hooks/usePaginatedList.test.jsx src/components/EmployeeFormModal.test.jsx` — `2 passed`, `4 passed`.
+- Final `npm test` from `frontend\` — `Test Files 9 passed (9); Tests 33 passed (33); Duration 12.04s`.
+- Final `npm run lint` from `frontend\` — passed with no warnings.
+- Final `npm run build` from `frontend\` — passed; Vite transformed 342 modules and built the production bundle in 1.01s.
+- Browser smoke check: the app was first opened without a running backend and the refresh request was refused. With backend responses mocked, the employee list loaded, server filter requests were observed, employee required-field validation appeared, and department listing/employee modal rendered.
+- `git diff --check` — passed.
+
+### Features completed
+
+- Added centralized employee and department services; page components contain no direct Axios requests.
+- Employee list supports debounced search, department/status filters, backend allowlisted sorting, server pagination, profile links, and refetch after create/update/deactivate.
+- Employee create/edit fields enforce backend limits/format rules locally; code is uppercased on create and omitted from PATCH. Deactivation requires confirmation and retains the employee record.
+- Employee profile is fetched by ID and supports permission-gated edit/deactivate controls.
+- Department page supports search, active-state filtering, server sorting/pagination, create/edit, active-employee manager selection, and a server-paginated department employee view.
+- Write controls are hidden without the relevant `employees:write` or `departments:write` permission; employee directory routes/navigation are restricted to roles allowed to browse the directory.
+- Standard backend 400/403/409 messages and validation details are displayed inline and through error toasts. Success mutations show success toasts.
+- List, form-option, profile, and department-employee reads use `AbortController`; stale list responses are ignored and search is debounced.
+
+### Tests passed
+
+- Frontend tests: 33 passed.
+- Frontend lint: passed with no warnings.
+- Frontend production build: passed.
+- Browser smoke check with mocked API responses: employee list, search/filter request, employee form validation, department list, and department employees modal rendered.
+
+### Known problems
+
+- A live backend was not configured/running during browser verification; real MongoDB data, cookie authentication, and create/update/deactivate API calls remain unverified end-to-end.
+- Manager and employee department selectors request at most 100 options because the backend caps `page_size` at 100; very large directories would need multi-page option loading.
+- The employee detail displays the department ObjectId because the employee payload does not include department display metadata.
+- Frontend checks are usability validation only; the backend remains authoritative for permissions, uniqueness, references, and all input validation.
+
+### Next step
+
+- Configure the backend and MongoDB replica set, then verify employee/department CRUD, permission denials, and deactivation constraints end-to-end with real API responses.
+
+## 2026-10-30 — Account and audit pages
+
+### Files created
+
+- `frontend/src/services/userService.js` — user list, create, edit, activation, deactivation, and administrator password-reset requests.
+- `frontend/src/services/auditService.js` — audit-log listing with pagination filters and inclusive UTC date boundaries.
+- `frontend/src/components/UserFormModal.jsx` — account create/edit form, role selection, optional employee link, and server validation feedback.
+- `frontend/src/components/CurrentUserDetails.jsx` — shared current-account summary used by Profile and Settings.
+- `frontend/src/pages/Users.jsx` and `Users.test.jsx` — searchable, filterable, paginated account management and its UI tests.
+- `frontend/src/pages/Profile.jsx` — current signed-in user's account details.
+- `frontend/src/pages/Settings.jsx` and `Settings.test.jsx` — current account details and password change with React Hook Form and Yup.
+- `frontend/src/pages/ForgotPassword.jsx` — public password-reset request form with a non-enumerating success message.
+- `frontend/src/pages/ResetPassword.jsx` and `PasswordResetPages.test.jsx` — reset confirmation using the email and token in the URL query.
+- `frontend/src/pages/AuditLogs.jsx` and `AuditLogs.test.jsx` — filterable, paginated audit-event table.
+- `frontend/src/utils/passwordStrength.js` and `passwordStrength.test.js` — local checks for frequent weak-password examples; the backend remains authoritative for Django's full common-password list.
+
+### Files modified
+
+- `frontend/src/App.jsx` — registered account, audit, and public password-reset routes with permission guards.
+- `frontend/src/config/navigation.js` — added permission-gated Users, Audit logs, Profile, and Settings links.
+- `frontend/src/context/AuthContext.jsx` — added local session clearing for password changes that already revoke sessions server-side.
+- `frontend/src/context/AuthContext.test.jsx` — verifies local logout carries the login success message without calling the revoked logout endpoint.
+- `frontend/src/pages/Login.jsx` — links to password recovery and displays the success message after password changes/resets.
+- `frontend/src/services/authService.js` — added password change and reset requests.
+- `frontend/src/services/backendServices.test.js` — verifies user, audit, and password endpoint paths and request/response shapes.
+- `frontend/src/utils/apiErrors.js` — maps account/password validation fields into form errors.
+- `frontend/src/components/ConfirmDialog.jsx` — allows a non-destructive confirmation button variant for activation/reset actions.
+- `frontend/src/components/foundation.test.jsx` — verifies sidebar permission filtering for the new account links.
+- `backend/accounts/views.py` — made password-reset requests public so signed-out users can use Forgot Password.
+- `backend/tests/accounts/test_authentication.py` — verifies the public reset-request route reaches input validation without authentication.
+- `docs/api-documentation.md` — documented user management, audit, and password-change/reset API contracts.
+- `docs/PROGRESS.md` — recorded this implementation and validation.
+
+### Dependencies installed
+
+- None. Existing React Hook Form, Yup, Axios, Bootstrap, and React-Bootstrap packages were reused.
+
+### Commands run and observed
+
+- From `frontend\`: final `npm test` — `Test Files 14 passed (14); Tests 54 passed (54); Duration 11.26s`.
+- From `frontend\`: `npm run lint` — passed with no warnings.
+- From `frontend\`: `npm run build` — passed; Vite transformed 353 modules.
+- From `frontend\`: `npx vitest run src/pages/Users.test.jsx` — `Test Files 1 passed (1); Tests 6 passed (6)`.
+- From `backend\`: focused account-authentication tests — `16 passed in 0.43s`.
+- From `backend\`: final `.\venv\Scripts\python.exe -m pytest -q tests` — `177 passed in 17.81s`.
+- From `backend\`: `.\venv\Scripts\python.exe manage.py check` — `System check identified no issues (0 silenced).`
+- `git diff --check` — passed with no output.
+- An initial user-create UI test submitted before asynchronous employee options loaded; the test now waits for those options. A full frontend run during a concurrent build also exposed a timing-sensitive existing pagination-hook test; the isolated final full suite passed.
+
+### Features completed
+
+- Users page: backend search, role and active-state filters, pagination, create/edit modal, role selection, optional employee association, confirmed activate/deactivate, and confirmed admin password-reset request.
+- Profile and Settings show the current session user. Settings validates password length, email mismatch, confirmation, and frequent common examples with Yup; after success it clears local auth state and redirects to `/login` with a success message. The backend enforces the full password rule set and revokes refresh sessions.
+- Forgot Password and Reset Password use the existing password-reset APIs; Reset Password reads both email and token from the URL query.
+- Audit Logs supports user ObjectId, action, start/end date filters, and server pagination. End-date filters include the full selected UTC day.
+- Sidebar links and routes check `users:manage`, `audit:read`, `own-profile:read`, and `own-password:change`. These are UX controls; API permissions remain authoritative.
+- Added frontend service modules for users and audit logs. Pages use shared tables, search, pagination, dialogs, form inputs, hooks, and toasts.
+- Made the password-reset request endpoint public; the response remains generic so it does not reveal whether an account exists.
+
+### Tests passed
+
+- Frontend tests: 54 passed.
+- Frontend lint and production build: passed.
+- Backend tests: 177 passed.
+- Django system check and `git diff --check`: passed.
+
+### Known problems
+
+- Password-reset email delivery is not configured. In development the backend prints reset links to its console; production reset requests require an email-delivery configuration.
+- The client blocks frequent known weak-password examples, while Django's full common-password list is checked by the backend and may reject additional values after submit.
+- The optional employee selector requests at most 100 records because the backend caps page size at 100.
+- No live MongoDB or browser end-to-end session was available; API/database integration remains unverified outside the existing fake-database backend tests.
+
+### Next step
+
+- Configure password-reset email delivery and the local MongoDB replica set, then verify account changes, reset links, and audit filtering end-to-end against the running backend.
+
+## Full development verification (2026-10-30)
+
+### Verification outcome
+
+- The backend and frontend development servers started and responded. The backend health endpoint returned `200`; the frontend loaded at `http://localhost:5173`.
+- MongoDB connectivity was verified with a successful ping. The target database is visible and the connection is to a writable replica-set primary.
+- The read-only metadata check found 18 live collections versus 17 declared. The extra collection is `connection_test`. The `users` and `refresh_tokens` validators differ from the repository definitions, and `audit_logs` is missing `ix_audit_action_created` and `ix_audit_created`. A read-only validation query found zero existing `users` or `refresh_tokens` documents failing the repository validators.
+- No schema/index reconciliation was run: it would modify the configured application database, and no dedicated test database is configured.
+- The Forgot Password and Reset Password pages both rendered in the browser. Navigating directly to `/forgot-password` stayed on that route; the earlier redirect was not reproducible.
+- The browser's unauthenticated session refresh returns `401` when no refresh cookie exists. This is expected for a signed-out browser and did not prevent the public recovery pages from loading. Use `localhost` rather than `127.0.0.1` for the frontend origin because CORS is configured for `http://localhost:5173`.
+- The Postman collection JSON files parsed successfully. They were not executed against authenticated endpoints.
+- Overall status: **partially verified**. Automated checks and safe live smoke checks pass, but authenticated workflows and real MongoDB writes/transactions were not exercised.
+
+### Files and dependencies
+
+- Modified for this verification: `docs/PROGRESS.md`.
+- Updated local, ignored development configuration: `backend/.env` received development signing secrets and local CORS/cookie settings. Secret values were not printed or committed.
+- No source-code files were changed, no tracked source files were created or deleted, and no dependencies were installed during this verification. The frontend build generated the standard ignored `frontend/dist/` output.
+- The account-page implementation's existing documentation/worktree changes predate this verification and were not altered here.
+
+### Commands run and observed
+
+- From `backend\`: `.\venv\Scripts\python.exe -m pytest -q -rs tests` — `177 passed in 5.29s`; no tests were skipped.
+- From `frontend\`: `npm test -- --run` — `14` test files and `54` tests passed. Vitest reported that jsdom environments were created per file as a performance advisory; there were no test failures.
+- From `frontend\`: `npm run lint` — exited successfully.
+- From `frontend\`: `npm run build` — succeeded; Vite transformed 353 modules and completed in 796 ms.
+- From `backend\`: `.\venv\Scripts\python.exe manage.py check` — `System check identified no issues (0 silenced).`
+- From `backend\`: `.\venv\Scripts\python.exe -m pip check` — `No broken requirements found.`
+- From the repository root: `git diff --check` — passed with no output.
+- Live API checks with `curl.exe`:
+  - `GET /api/health/` — `200`, `{"success":true,"data":{"status":"ok"},"meta":{}}`.
+  - Unauthenticated `GET /api/users/` — `401`, standard `not_authenticated` error envelope.
+  - `POST /api/auth/password-reset/request/` with `{}` — `400`, standard validation envelope reporting the required email field.
+  - CORS `OPTIONS` preflight from `http://localhost:5173` — `200`, with that origin and credentials allowed.
+- Read-only MongoDB checks — ping `True`; replica-set primary `True`; database visible; 18 collections. Zero current `users` and `refresh_tokens` documents failed the declared validators.
+- Browser smoke checks — Forgot Password rendered its heading and request button; Reset Password rendered its heading and two password inputs from URL query parameters.
+
+### Passed, incomplete, and known issues
+
+- Passed: backend test suite, frontend test suite, frontend lint, production build, Django system check, Python dependency check, live health/auth/validation/CORS checks, MongoDB ping/primary check, recovery-page route rendering, and Postman JSON parsing.
+- Not verified: authenticated user/employee/department/audit CRUD, password change/reset completion, live database writes, transaction behavior, email delivery, or the full authenticated browser flow. `MONGO_TEST_URI` is unset, and no test login credentials or dedicated test database were available. Do not treat the fake-collection unit tests as live database integration tests.
+- Django ORM migrations are not applicable: SmartERP uses the dummy Django database backend and PyMongo by design.
+- No application-source bug was confirmed by these checks. The local backend configuration gap was addressed in the ignored `.env`; live schema/index drift remains unchanged and needs an approved, isolated reconciliation.
+- Password-reset email delivery still requires configuration. Recovery requests were not submitted with a real email address or token.
+
+### Current status and next step
+
+- Current status: **partially verified; not all acceptance criteria can be confirmed**.
+- Configure a dedicated MongoDB test database and test credentials, then run authenticated CRUD, authorization, password/session revocation, and audit checks there. Review and reconcile the live validator/index drift only after confirming the target database and authorization to change its metadata. Configure email delivery separately before testing real password-reset delivery.
+
+## 2026-10-31 — Product catalogue API
+
+### Files created
+
+- `backend/inventory/serializers.py` — strict product create/PATCH and list-query validation; rejects unsafe keys, immutable SKU edits, and direct stock-field changes.
+- `backend/inventory/repository.py` — PyMongo product reads/writes, normalized SKU and name search, filters, low-stock query, sorting, pagination, and category listing.
+- `backend/inventory/services.py` — SKU uniqueness, safe product serialization, CRUD orchestration, and the active-product guard for future order services.
+- `backend/inventory/urls.py` — product routes, with `low-stock/` and `categories/` before the ObjectId detail route.
+- `backend/tests/inventory/test_product_api.py` — product endpoint, validation, permissions, filtering, stock restriction, routing, and inactive-order-guard tests.
+- `docs/postman/products.postman_collection.json` — nine product API success and negative requests.
+
+### Files modified
+
+- `backend/inventory/views.py` — added authenticated product list/create/detail/update, low-stock, and category handlers.
+- `backend/config/urls.py` — mounted `/api/products/`.
+- `backend/database/indexes.py` — product schema validator now requires positive Decimal128 prices.
+- `backend/tests/accounts/fakes.py` — taught the test-only fake query engine the `$expr` comparisons used by low-stock Mongo queries.
+- `docs/api-documentation.md` — documented product endpoints, roles, request rules, low-stock semantics, and the Postman collection.
+- `docs/PROGRESS.md` — recorded this implementation and validation.
+
+### Dependencies installed
+
+- None. Existing Django REST Framework, PyMongo/BSON, and pytest packages were reused.
+
+### Commands run and observed
+
+- `.\backend\venv\Scripts\python.exe -m pytest -q .\backend\tests\inventory` — `16 passed in 0.23s`.
+- `.\backend\venv\Scripts\python.exe -m pytest -q .\backend\tests` — `193 passed in 5.20s`.
+- `.\backend\venv\Scripts\python.exe .\backend\manage.py check` — `System check identified no issues (0 silenced).`
+- Parsed `docs\postman\products.postman_collection.json` with Python — `Valid Postman JSON: SmartERP Products (9 requests)`.
+- `git diff --check` — passed with no output.
+- An initial focused test run exposed four failures because serialized products did not expose the public `id` field; fixed the projection and reran all 16 product tests successfully.
+- The first Postman JSON command had a PowerShell quoting error; reran with a corrected command and validated the collection.
+
+### Features completed
+
+- Implemented `GET/POST /api/products/`, `GET/PATCH /api/products/{id}/`, `GET /api/products/low-stock/`, and `GET /api/products/categories/`.
+- Used the existing permission matrix: Inventory Manager and Super Admin can write; roles with `products:read` can read.
+- SKUs are trimmed, uppercase, and unique. Product prices must be positive, have at most two decimal places, and are stored as BSON Decimal128.
+- Creation initializes on-hand and reserved quantities to zero and never accepts client stock values. PATCH rejects both quantity fields with a clear message; SKU is immutable.
+- Product lists support escaped name/SKU search, category/active/low-stock filters, allow-listed sorting, and bounded pagination. Low-stock uses the exact available-stock expression `quantity_on_hand - reserved_quantity <= min_stock_level`.
+- Categories are returned as sorted distinct values. The configured product routes put fixed paths before the ID path.
+- Added and tested `get_active_product_for_order`, which rejects missing/inactive products for use by order workflows.
+
+### Tests passed
+
+- Product API tests: 16 passed.
+- Full backend suite: 193 passed.
+- Django system check: passed.
+- Postman collection JSON parse: passed, nine requests loaded.
+- `git diff --check`: passed.
+
+### Known problems
+
+- The product tests use the in-memory fake MongoDB; no live MongoDB integration or write was run because `MONGO_TEST_URI` is not configured. Apply the updated product validator with the approved `init_db` workflow after configuring an isolated test database.
+- No sales- or purchase-order API/service exists in this checkout. The active-product service guard is ready and tested, but there is currently no order-creation flow to call it; actual order rejection is not implemented yet.
+- Stock-adjustment/receipt/fulfilment services and stock-movement writes are also not implemented yet. Product create/PATCH cannot change stock.
+- Postman requests were parsed but not executed against a running authenticated backend.
+
+### Next step
+
+- When order APIs are implemented, call `get_active_product_for_order` for each product before creating a new order. Configure a dedicated MongoDB test database before validating the updated Mongo schema against a real replica set.
+
+## 2026-10-31 — Transactional stock engine and idempotent adjustments
+
+### Files created
+
+- `backend/common/idempotency.py` — reusable UUID idempotency key validation, canonical request hashing, per-user/per-endpoint scope, transaction execution, response replay, and conflict handling.
+- `backend/inventory/stock_urls.py` — mounts the stock-adjustment endpoint.
+- `backend/inventory/movement_urls.py` — mounts the stock-movement list endpoint.
+- `backend/tests/inventory/test_stock_api.py` — tests adjustment deltas, available/reserved constraints, idempotency, concurrent reductions, movement filters, permissions, and immutable history.
+- `docs/postman/stock.postman_collection.json` — five stock adjustment and movement API examples.
+
+### Files modified
+
+- `backend/common/exceptions.py` — added the standard HTTP 422 idempotency-key/body conflict.
+- `backend/config/urls.py` — mounted `/api/stock-adjustments/` and `/api/stock-movements/`.
+- `backend/database/indexes.py` — changed the idempotency unique index to `(scope, key)` and clarified its purpose. The stock-movement validator already required `reserved_change`; added a test that asserts its integer BSON type.
+- `backend/inventory/repository.py` — added the conditional product update with `find_one_and_update`, transactional movement insert, and filtered/paginated movement reads.
+- `backend/inventory/serializers.py` — added strict stock-adjustment and movement-query validation.
+- `backend/inventory/services.py` — added `apply_stock_change`, transactional/idempotent adjustment service, and movement-list business logic.
+- `backend/inventory/views.py` — added permission-checked adjustment and movement handlers.
+- `backend/tests/accounts/fakes.py` — added atomic conditional updates, transaction test support primitives, and duplicate-key behavior for idempotency collections.
+- `backend/tests/database/test_indexes.py` — asserts the `(scope, key)` unique idempotency index and reserved-change validator type.
+- `docs/api-documentation.md` — documented stock adjustment and movement endpoints, idempotency behavior, and the overselling protection.
+- `docs/database-design.md` — updated the idempotency record example, scope, compound index order, response storage, and retention.
+- `docs/PROGRESS.md` — recorded implementation and verification.
+
+### Dependencies installed
+
+- None. Existing PyMongo transaction, BSON, DRF, and pytest dependencies were reused.
+
+### Commands run and observed
+
+- `.\backend\venv\Scripts\python.exe -m pytest -q .\backend\tests\inventory` — `27 passed in 0.33s`.
+- `.\backend\venv\Scripts\python.exe -m pytest -q .\backend\tests` — `204 passed in 5.83s`.
+- `.\backend\venv\Scripts\python.exe .\backend\manage.py check` — `System check identified no issues (0 silenced).`
+- `.\backend\venv\Scripts\python.exe -m compileall -q .\backend\common\idempotency.py .\backend\inventory\services.py .\backend\inventory\repository.py .\backend\inventory\serializers.py .\backend\inventory\views.py` — passed with no output.
+- Parsed Postman JSON with Python — `Valid Postman JSON: SmartERP Stock (5 requests)` and `Valid Postman JSON: SmartERP Products (9 requests)`.
+- `git diff --check` — passed with no output.
+- An initial test run found the installed PyMongo exposes transaction concern classes from `pymongo.read_concern` and `pymongo.write_concern`; corrected imports.
+- Focused stock tests then exposed a missing `utc_now` import; fixed and reran.
+- The date-range test initially sent `+00:00` unescaped in a query string; encoded query parameters with `urlencode` and reran.
+
+### Features completed
+
+- Every stock change is routed through `apply_stock_change(session, ...)`. It performs one conditional `find_one_and_update` returning the AFTER document, computes the on-hand before value from the returned quantity and delta, and inserts the append-only movement with the same session.
+- Non-fulfilment reductions require available quantity through a Mongo `$expr`; fulfilment requires both on-hand and reserved quantities; reservation release requires sufficient reserved quantity. A missed condition raises `InsufficientStock`.
+- `execute_idempotent` runs the stock update, movement insert, and stored response write inside one `with_transaction` callback using snapshot read concern and majority write concern. The callback is restricted to database work through its session and can safely be retried by PyMongo.
+- Same-key/same-body retries return the stored result. Same-key/different-body requests receive HTTP 422. Duplicate-key races are resolved by loading the committed stored response.
+- Implemented `POST /api/stock-adjustments/` with `stock:adjust`, non-zero integer change, reason, and required UUID `Idempotency-Key`.
+- Implemented `GET /api/stock-movements/` with product/type/date/user filters, bounded pagination, and newest-first ordering. No movement update/delete endpoint exists.
+- Stock movement records include `reserved_change`; the current schema validator already had the required integer field, and a test now verifies it.
+- Concurrent test requests reducing 10 units by 7 each allow one reduction and reject the other, leaving quantity 3 and one movement record.
+
+### Tests passed
+
+- Inventory tests: 27 passed.
+- Full backend test suite: 204 passed.
+- Django system check: passed.
+- Changed Python module compilation: passed.
+- Product and stock Postman collection JSON parsing: passed.
+- `git diff --check`: passed.
+
+### Known problems
+
+- The transaction tests use a thread-safe in-memory fake that serializes callback execution and supports rollback. They do not prove behavior against a live MongoDB replica set; `MONGO_TEST_URI` remains unconfigured. Configure a dedicated test database and run transaction/concurrency integration tests there.
+- Postman collections were parsed but not executed against a live authenticated backend.
+- No other production module currently changes stock. Future purchase receipt, sale fulfilment, reservation, return, and cancellation services must call `apply_stock_change`; bypassing it would omit movement history and its conditional stock checks.
+- Existing live MongoDB index/validator drift was not reconciled. Run `init_db` against the approved isolated database to create the `(scope, key)` unique index before using idempotent operations.
+
+### Next step
+
+- Configure the isolated replica-set test database, initialize the updated validators/indexes, and run stock adjustment and concurrent transaction integration tests against MongoDB. Wire future purchase/sales workflows through `apply_stock_change`.

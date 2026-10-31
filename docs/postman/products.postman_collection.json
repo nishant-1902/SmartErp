@@ -1,0 +1,187 @@
+{
+  "info": {
+    "_postman_id": "fcbd9917-1461-4ad0-9982-365ce24f0321",
+    "name": "SmartERP Products",
+    "description": "Product catalogue success and negative requests. Set base_url and role-appropriate access_token collection variables first.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000/api"
+    },
+    {
+      "key": "access_token",
+      "value": ""
+    },
+    {
+      "key": "employee_access_token",
+      "value": ""
+    },
+    {
+      "key": "product_id",
+      "value": ""
+    },
+    {
+      "key": "created_product_sku",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Success - List products",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/products/?page=1&page_size=20&sort_by=name&sort_order=asc"
+      }
+    },
+    {
+      "name": "Success - Create product",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.collectionVariables.set('created_product_sku', 'POSTMAN-' + Date.now());"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (pm.response.code === 201) {",
+              "  pm.collectionVariables.set('product_id', pm.response.json().data.product.id);",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"sku\": \"{{created_product_sku}}\",\n  \"name\": \"Postman Widget\",\n  \"description\": \"Created by the Postman collection\",\n  \"category\": \"Hardware\",\n  \"unit\": \"each\",\n  \"cost_price\": \"12.50\",\n  \"selling_price\": \"19.99\",\n  \"min_stock_level\": 5,\n  \"is_active\": true\n}"
+        },
+        "url": "{{base_url}}/products/"
+      }
+    },
+    {
+      "name": "Success - Get product",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/products/{{product_id}}/"
+      }
+    },
+    {
+      "name": "Success - Update product details",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"description\": \"Updated by the Postman collection\"\n}"
+        },
+        "url": "{{base_url}}/products/{{product_id}}/"
+      }
+    },
+    {
+      "name": "Success - List low-stock products",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/products/low-stock/?page=1&page_size=20"
+      }
+    },
+    {
+      "name": "Success - List product categories",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/products/categories/"
+      }
+    },
+    {
+      "name": "Negative - Duplicate SKU",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"sku\": \"{{created_product_sku}}\",\n  \"name\": \"Duplicate SKU example\",\n  \"category\": \"Hardware\",\n  \"unit\": \"each\",\n  \"cost_price\": \"1.00\",\n  \"selling_price\": \"2.00\",\n  \"min_stock_level\": 0\n}"
+        },
+        "url": "{{base_url}}/products/"
+      }
+    },
+    {
+      "name": "Negative - Attempt to patch stock",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"quantity_on_hand\": 100\n}"
+        },
+        "url": "{{base_url}}/products/{{product_id}}/"
+      }
+    },
+    {
+      "name": "Negative - Employee role cannot create",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{employee_access_token}}",
+            "type": "string"
+          }
+        ]
+      },
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"sku\": \"POSTMAN-DENIED\",\n  \"name\": \"Permission example\",\n  \"category\": \"Hardware\",\n  \"unit\": \"each\",\n  \"cost_price\": \"1.00\",\n  \"selling_price\": \"2.00\",\n  \"min_stock_level\": 0\n}"
+        },
+        "url": "{{base_url}}/products/"
+      }
+    }
+  ]
+}

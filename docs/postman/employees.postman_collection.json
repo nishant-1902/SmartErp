@@ -1,0 +1,233 @@
+{
+  "info": {
+    "_postman_id": "ae3db37e-3c11-4313-8d0d-b5cf6a74b617",
+    "name": "SmartERP Employees",
+    "description": "Employee API success and negative requests. Set base_url and role-appropriate collection variables before running.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000/api"
+    },
+    {
+      "key": "access_token",
+      "value": ""
+    },
+    {
+      "key": "employee_access_token",
+      "value": ""
+    },
+    {
+      "key": "created_employee_code",
+      "value": ""
+    },
+    {
+      "key": "employee_id",
+      "value": ""
+    },
+    {
+      "key": "department_id",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Success - List employees",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/employees/?page=1&page_size=20&sort_by=last_name&sort_order=asc"
+      }
+    },
+    {
+      "name": "Success - Create employee",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.collectionVariables.set('created_employee_code', 'POSTMAN-' + Date.now());"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (pm.response.code === 201) {",
+              "  pm.collectionVariables.set('employee_id', pm.response.json().data.employee.id);",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"employee_code\": \"{{created_employee_code}}\",\n  \"first_name\": \"Ada\",\n  \"last_name\": \"Lovelace\",\n  \"email\": \"ada.{{created_employee_code}}@example.test\",\n  \"phone\": \"+1 (415) 555-0123\",\n  \"department_id\": \"{{department_id}}\",\n  \"designation\": \"Engineer\",\n  \"joining_date\": \"2024-01-15\",\n  \"status\": \"active\"\n}"
+        },
+        "url": "{{base_url}}/employees/"
+      }
+    },
+    {
+      "name": "Success - Get employee",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/employees/{{employee_id}}/"
+      }
+    },
+    {
+      "name": "Success - Patch employee",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"phone\": \"+1 415 555 0188\"\n}"
+        },
+        "url": "{{base_url}}/employees/{{employee_id}}/"
+      }
+    },
+    {
+      "name": "Success - Employee self profile",
+      "request": {
+        "method": "GET",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{employee_access_token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "url": "{{base_url}}/employees/me/"
+      }
+    },
+    {
+      "name": "Success - List designations",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/employees/designations/"
+      }
+    },
+    {
+      "name": "Success - Deactivate employee",
+      "request": {
+        "method": "DELETE",
+        "url": "{{base_url}}/employees/{{employee_id}}/"
+      }
+    },
+    {
+      "name": "Negative - Duplicate employee code",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"employee_code\": \"{{created_employee_code}}\",\n  \"first_name\": \"Different\",\n  \"last_name\": \"Employee\",\n  \"email\": \"duplicate-{{created_employee_code}}@example.test\",\n  \"department_id\": \"{{department_id}}\",\n  \"designation\": \"Engineer\",\n  \"joining_date\": \"2024-01-15\"\n}"
+        },
+        "url": "{{base_url}}/employees/"
+      }
+    },
+    {
+      "name": "Negative - Invalid phone",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"employee_code\": \"POSTMAN-BAD-PHONE\",\n  \"first_name\": \"Invalid\",\n  \"last_name\": \"Phone\",\n  \"email\": \"bad-phone@example.test\",\n  \"phone\": \"555-NOT-A-NUMBER\",\n  \"department_id\": \"{{department_id}}\",\n  \"designation\": \"Engineer\",\n  \"joining_date\": \"2024-01-15\"\n}"
+        },
+        "url": "{{base_url}}/employees/"
+      }
+    },
+    {
+      "name": "Negative - Inactive department",
+      "description": "Set department_id to an inactive department. Expected response: HTTP 400.",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"employee_code\": \"POSTMAN-INACTIVE-DEPT\",\n  \"first_name\": \"Inactive\",\n  \"last_name\": \"Department\",\n  \"email\": \"inactive-dept@example.test\",\n  \"department_id\": \"{{department_id}}\",\n  \"designation\": \"Engineer\",\n  \"joining_date\": \"2024-01-15\"\n}"
+        },
+        "url": "{{base_url}}/employees/"
+      }
+    },
+    {
+      "name": "Negative - Employee role cannot create",
+      "request": {
+        "method": "POST",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{employee_access_token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{}"
+        },
+        "url": "{{base_url}}/employees/"
+      }
+    },
+    {
+      "name": "Negative - Invalid sort field",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/employees/?sort_by=name_search"
+      }
+    }
+  ]
+}
