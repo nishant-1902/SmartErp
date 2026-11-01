@@ -6,27 +6,37 @@ from typing import Any
 
 from bson import ObjectId
 from bson.decimal128 import Decimal128
+from pymongo.client_session import ClientSession
 from pymongo.database import Database
 
 from common.exceptions import (
+    ConflictError,
     InvalidStateTransition,
     NotFoundError,
     PermissionDeniedError,
     ValidationFailed,
 )
+from common.idempotency import execute_idempotent, normalize_idempotency_key
 from common.money import line_total, quantize_money, to_decimal
 from common.object_id import parse_object_id
 from common.pagination import Pagination
+from common.permissions import has_permission
 from common.serialization import serialize_document
-from inventory.services import get_active_product_for_order
+from common.time import utc_now
+from accounts.repository import write_audit_log
+from inventory.services import apply_stock_change, get_active_product_for_order
 from purchases.repository import (
+    allocate_receipt_reference,
     count_purchase_orders,
     find_purchase_order_by_id,
+    increment_received_quantity,
     insert_purchase_order,
+    insert_purchase_receipt,
     list_purchase_orders as list_purchase_order_records,
     public_purchase_order,
     transition_purchase_order as transition_purchase_order_record,
     update_draft_purchase_order,
+    update_received_purchase_order_status,
 )
 from suppliers.services import require_active_supplier
 
@@ -271,3 +281,201 @@ def transition_purchase_order(
     if updated is None:
         raise InvalidStateTransition()
     return _public_order(updated)
+
+
+def receive_purchase_order(
+    database: Database[Any],
+    *,
+    purchase_order_id: ObjectId | str,
+    items: list[dict[str, Any]],
+    notes: str | None,
+    actor: Any,
+    idempotency_key: str,
+) -> dict[str, Any]:
+    """Receive PO quantities, stock, audit, and idempotency in one transaction."""
+    parsed_order_id = parse_object_id(purchase_order_id)
+    actor_id = parse_object_id(getattr(actor, "id", None))
+    if not has_permission(actor, "purchase:receive"):
+        raise PermissionDeniedError("The 'purchase:receive' permission is required.")
+    normalized_key = normalize_idempotency_key(idempotency_key)
+
+    normalized_items: list[dict[str, Any]] = []
+    seen_product_ids: set[ObjectId] = set()
+    for item in items:
+        product_id = parse_object_id(item["product_id"])
+        quantity = item["quantity_received"]
+        if (
+            isinstance(quantity, bool)
+            or not isinstance(quantity, int)
+            or quantity <= 0
+        ):
+            raise ValidationFailed(
+                "Received quantities must be positive integers.",
+                details={"quantity_received": "Must be a positive integer."},
+            )
+        if product_id in seen_product_ids:
+            raise ValidationFailed(
+                "A product may appear only once in a receipt.",
+                details={"items": "Duplicate product IDs are not allowed."},
+            )
+        seen_product_ids.add(product_id)
+        normalized_items.append(
+            {"product_id": product_id, "quantity_received": quantity}
+        )
+
+    request_body = {
+        "purchase_order_id": parsed_order_id,
+        "items": normalized_items,
+        "notes": notes,
+    }
+
+    def operation(
+        session: ClientSession,
+        receipt_id: ObjectId,
+    ) -> dict[str, Any]:
+        order = find_purchase_order_by_id(
+            database,
+            parsed_order_id,
+            session=session,
+        )
+        if order is None:
+            raise NotFoundError("Purchase order was not found.")
+        if not has_permission(actor, "purchase:receive"):
+            raise PermissionDeniedError(
+                "The 'purchase:receive' permission is required."
+            )
+        expected_status = order["status"]
+        if expected_status not in {"approved", "partially_received"}:
+            raise InvalidStateTransition(
+                "Only approved or partially received purchase orders can be received."
+            )
+
+        order_items = {item["product_id"]: item for item in order["items"]}
+        prepared_items: list[dict[str, Any]] = []
+        for requested in normalized_items:
+            line = order_items.get(requested["product_id"])
+            if line is None:
+                raise ValidationFailed(
+                    "A receipt product is not on this purchase order.",
+                    details={"product_id": str(requested["product_id"])},
+                )
+            remaining = line["quantity_ordered"] - line["quantity_received"]
+            if requested["quantity_received"] > remaining:
+                raise ValidationFailed(
+                    "Received quantity exceeds the remaining ordered quantity.",
+                    details={
+                        "product_id": str(requested["product_id"]),
+                        "remaining_quantity": remaining,
+                    },
+                )
+            prepared_items.append(
+                {
+                    "product_id": requested["product_id"],
+                    "quantity_received": requested["quantity_received"],
+                    "ordered_quantity": line["quantity_ordered"],
+                }
+            )
+
+        receipt_reference = allocate_receipt_reference(database, session)
+        receipt = insert_purchase_receipt(
+            database,
+            session,
+            receipt_id=receipt_id,
+            receipt_reference=receipt_reference,
+            purchase_order=order,
+            items=[
+                {
+                    "product_id": item["product_id"],
+                    "quantity_received": item["quantity_received"],
+                }
+                for item in prepared_items
+            ],
+            received_by=actor_id,
+            idempotency_key=normalized_key,
+            notes=notes,
+        )
+
+        movement_reason = notes or f"Purchase receipt {receipt_reference}"
+        for item in prepared_items:
+            apply_stock_change(
+                session,
+                item["product_id"],
+                item["quantity_received"],
+                0,
+                "purchase_receipt",
+                movement_reason,
+                "purchase_receipt",
+                receipt_id,
+                actor_id,
+            )
+
+        received_by_product = {
+            item["product_id"]: item["quantity_received"]
+            for item in prepared_items
+        }
+        for item in prepared_items:
+            result = increment_received_quantity(
+                database,
+                session,
+                purchase_order_id=parsed_order_id,
+                product_id=item["product_id"],
+                ordered_quantity=item["ordered_quantity"],
+                received_quantity=item["quantity_received"],
+            )
+            if result.modified_count != 1:
+                raise ConflictError(
+                    "Purchase-order quantities changed while processing this receipt."
+                )
+
+        all_received = all(
+            item["quantity_received"]
+            + received_by_product.get(item["product_id"], 0)
+            == item["quantity_ordered"]
+            for item in order["items"]
+        )
+        next_status = "received" if all_received else "partially_received"
+        status_result = update_received_purchase_order_status(
+            database,
+            session,
+            purchase_order_id=parsed_order_id,
+            expected_status=expected_status,
+            next_status=next_status,
+            actor_id=actor_id,
+            note=notes,
+        )
+        if status_result.modified_count != 1:
+            raise ConflictError(
+                "Purchase-order status changed while processing this receipt."
+            )
+
+        write_audit_log(
+            database,
+            actor_id=actor_id,
+            action="purchase_order.received",
+            resource="purchase_order",
+            resource_id=parsed_order_id,
+            outcome="success",
+            session=session,
+            now=utc_now(),
+        )
+        return {
+            "purchase_receipt": serialize_document(
+                {
+                    "id": receipt["_id"],
+                    **{
+                        key: value
+                        for key, value in receipt.items()
+                        if key != "_id"
+                    },
+                }
+            )
+        }
+
+    return execute_idempotent(
+        database,
+        user_id=actor_id,
+        endpoint=f"/api/purchase-orders/{parsed_order_id}/receive/",
+        key=normalized_key,
+        request_body=request_body,
+        operation=operation,
+    )

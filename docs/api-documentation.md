@@ -163,7 +163,36 @@ their matching `purchase:submit`, `purchase:approve`, `purchase:reject`, or
 All order responses use the standard JSON envelope. Invalid IDs and request
 fields return 400, unauthenticated callers return 401, missing permissions
 return 403, missing orders return 404, and invalid state transitions return
-409. Receiving and stock updates are not part of this step.
+409.
+
+### Receive purchase order
+
+- **Method and URL:** `POST /api/purchase-orders/{id}/receive/`.
+- **Role:** Requires `purchase:receive` (Purchase Manager, Inventory Manager,
+  or Super Admin).
+- **Header:** Required UUID `Idempotency-Key`.
+- **Body:** `{"items":[{"product_id":"...","quantity_received":2}],"notes":"..."}`.
+  `notes` is optional; product IDs must be unique in the request, and each
+  quantity must be a positive integer no greater than the PO line's remaining
+  ordered quantity.
+- **Success (`201`):** Standard envelope containing `data.purchase_receipt`,
+  including its `RCPT-YYYY-000001` reference.
+- **Replay behavior:** Repeating the same key and body returns the original
+  receipt without increasing stock again. Reusing the key with a different
+  body returns `422 idempotency_key_reused`.
+- **Atomic effects:** Receipt record, stock updates and movements, PO received
+  quantities/status history, audit log, receipt counter, and stored
+  idempotency response are written in one MongoDB transaction. A failure rolls
+  all of them back.
+- **Deployment requirement:** MongoDB transactions require a replica set or
+  sharded cluster; standalone MongoDB cannot run this operation. Transactions
+  add coordination and resource overhead, so receipt transactions must stay
+  short and perform database work only.
+- **Status:** Only Approved or Partially Received POs may be received. The
+  order becomes Partially Received until every ordered line is complete, then
+  Received. Concurrent line updates use a conditional quantity cap; stale or
+  excessive receipts fail without over-receiving.
+- **Status codes:** `201`, `400`, `401`, `403`, `404`, `409`, `422`.
 
 ## Employees
 

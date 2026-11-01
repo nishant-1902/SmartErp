@@ -395,7 +395,7 @@ COLLECTIONS: dict[str, CollectionDefinition] = {
         validator=_schema(
             (
                 "receipt_reference", "purchase_order_id", "supplier_id", "items",
-                "received_by", "created_at",
+                "received_by", "created_at", "idempotency_key", "notes",
             ),
             {
                 "receipt_reference": {
@@ -420,7 +420,12 @@ COLLECTIONS: dict[str, CollectionDefinition] = {
                 },
                 "received_by": {"bsonType": "objectId"},
                 "created_at": {"bsonType": "date"},
-                "idempotency_key": {"bsonType": ["string", "null"]},
+                "idempotency_key": {
+                    "bsonType": "string",
+                    "minLength": 36,
+                    "maxLength": 36,
+                },
+                "notes": {"bsonType": ["string", "null"], "maxLength": 500},
             },
         ),
         indexes=(

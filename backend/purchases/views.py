@@ -17,12 +17,14 @@ from purchases.serializers import (
     PurchaseOrderCreateSerializer,
     PurchaseOrderListQuerySerializer,
     PurchaseOrderPatchSerializer,
+    PurchaseReceiptSerializer,
     RejectPurchaseOrderSerializer,
 )
 from purchases.services import (
     create_purchase_order,
     get_purchase_order,
     list_purchase_orders,
+    receive_purchase_order,
     transition_purchase_order,
     update_purchase_order,
 )
@@ -186,3 +188,23 @@ def purchase_order_cancel_view(request, purchase_order_id: str):
         action="cancel",
         permission="purchase:cancel",
     )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticatedMongo])
+def purchase_order_receive_view(request, purchase_order_id: str):
+    """Receive PO quantities through one idempotent MongoDB transaction."""
+    parsed_id = parse_object_id(purchase_order_id)
+    if not has_permission(request.user, "purchase:receive"):
+        return _permission_denied("purchase:receive")
+    values = _validated_request(PurchaseReceiptSerializer, request.data)
+    with mongo_database() as database:
+        receipt = receive_purchase_order(
+            database,
+            purchase_order_id=parsed_id,
+            items=values["items"],
+            notes=values.get("notes"),
+            actor=request.user,
+            idempotency_key=request.headers.get("Idempotency-Key") or "",
+        )
+    return success_response(receipt, status=201)

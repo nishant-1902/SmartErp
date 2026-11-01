@@ -119,10 +119,13 @@ def insert_purchase_order(
 def find_purchase_order_by_id(
     database: Database[Any],
     purchase_order_id: ObjectId | str,
+    *,
+    session: Any = None,
 ) -> dict[str, Any] | None:
     """Find one purchase order by a validated ObjectId."""
     return database["purchase_orders"].find_one(
-        {"_id": parse_object_id(purchase_order_id)}
+        {"_id": parse_object_id(purchase_order_id)},
+        session=session,
     )
 
 
@@ -162,6 +165,131 @@ def count_purchase_orders(
     if supplier_id is not None:
         query["supplier_id"] = supplier_id
     return database["purchase_orders"].count_documents(query)
+
+
+def allocate_receipt_reference(
+    database: Database[Any],
+    session: Any,
+    *,
+    year: int | None = None,
+) -> str:
+    """Atomically allocate a receipt reference inside the caller's transaction."""
+    number_year = year if year is not None else utc_now().year
+    if isinstance(number_year, bool) or not isinstance(number_year, int):
+        raise ValueError("Receipt year must be an integer.")
+    counter_id = f"purchase_receipt:{number_year}"
+    while True:
+        now = utc_now()
+        try:
+            counter = database["counters"].find_one_and_update(
+                {"_id": counter_id},
+                {"$inc": {"value": 1}, "$set": {"updated_at": now}},
+                upsert=True,
+                return_document=ReturnDocument.AFTER,
+                session=session,
+            )
+        except DuplicateKeyError:
+            counter = database["counters"].find_one_and_update(
+                {"_id": counter_id},
+                {"$inc": {"value": 1}, "$set": {"updated_at": now}},
+                return_document=ReturnDocument.AFTER,
+                session=session,
+            )
+        if (
+            counter is None
+            or not isinstance(counter.get("value"), int)
+            or isinstance(counter.get("value"), bool)
+        ):
+            raise RuntimeError("Receipt counter did not return a valid value.")
+        return f"RCPT-{number_year}-{counter['value']:06d}"
+
+
+def insert_purchase_receipt(
+    database: Database[Any],
+    session: Any,
+    *,
+    receipt_id: ObjectId,
+    receipt_reference: str,
+    purchase_order: Mapping[str, Any],
+    items: list[dict[str, Any]],
+    received_by: ObjectId,
+    idempotency_key: str,
+    notes: str | None,
+) -> dict[str, Any]:
+    """Insert a receipt within the purchase workflow transaction."""
+    document: dict[str, Any] = {
+        "_id": receipt_id,
+        "receipt_reference": receipt_reference,
+        "purchase_order_id": purchase_order["_id"],
+        "supplier_id": purchase_order["supplier_id"],
+        "items": items,
+        "received_by": received_by,
+        "idempotency_key": idempotency_key,
+        "notes": notes,
+        "created_at": utc_now(),
+    }
+    database["purchase_receipts"].insert_one(document, session=session)
+    return document
+
+
+def increment_received_quantity(
+    database: Database[Any],
+    session: Any,
+    *,
+    purchase_order_id: ObjectId,
+    product_id: ObjectId,
+    ordered_quantity: int,
+    received_quantity: int,
+) -> Any:
+    """Increment a PO line only when this receipt cannot exceed its ordered amount."""
+    return database["purchase_orders"].update_one(
+        {
+            "_id": purchase_order_id,
+            "items": {
+                "$elemMatch": {
+                    "product_id": product_id,
+                    "quantity_ordered": ordered_quantity,
+                    "quantity_received": {
+                        "$lte": ordered_quantity - received_quantity,
+                    },
+                }
+            },
+        },
+        {"$inc": {"items.$.quantity_received": received_quantity}},
+        session=session,
+    )
+
+
+def update_received_purchase_order_status(
+    database: Database[Any],
+    session: Any,
+    *,
+    purchase_order_id: ObjectId,
+    expected_status: str,
+    next_status: str,
+    actor_id: ObjectId,
+    note: str | None,
+) -> Any:
+    """Conditionally update PO status and append receipt history transactionally."""
+    now = utc_now()
+    return database["purchase_orders"].update_one(
+        {"_id": purchase_order_id, "status": expected_status},
+        {
+            "$set": {
+                "status": next_status,
+                "updated_at": now,
+            },
+            "$push": {
+                "status_history": {
+                    "status": next_status,
+                    "by": actor_id,
+                    "at": now,
+                    "note": note,
+                }
+            },
+        },
+        session=session,
+    )
 
 
 def update_draft_purchase_order(

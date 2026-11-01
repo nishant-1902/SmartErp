@@ -153,3 +153,49 @@ class RejectPurchaseOrderSerializer(StrictSerializer):
 
 class EmptyActionSerializer(StrictSerializer):
     """Reject unexpected request-body fields for argument-free actions."""
+
+
+class PurchaseReceiptItemSerializer(StrictSerializer):
+    """Validate one product receipt quantity."""
+
+    product_id = serializers.CharField(trim_whitespace=True)
+    quantity_received = serializers.IntegerField(min_value=1)
+
+    def to_internal_value(self, data):
+        if isinstance(data, Mapping) and isinstance(
+            data.get("quantity_received"),
+            bool,
+        ):
+            raise serializers.ValidationError(
+                {"quantity_received": "Must be a positive integer."}
+            )
+        return super().to_internal_value(data)
+
+    def validate_product_id(self, value):
+        """Parse product IDs before passing them to a service or query."""
+        return parse_object_id(value)
+
+
+class PurchaseReceiptSerializer(StrictSerializer):
+    """Validate receipt body fields."""
+
+    items = PurchaseReceiptItemSerializer(many=True, allow_empty=False)
+    notes = serializers.CharField(
+        required=False,
+        allow_null=True,
+        allow_blank=True,
+        min_length=3,
+        max_length=500,
+        trim_whitespace=True,
+        default=None,
+    )
+
+    def validate(self, attrs):
+        product_ids = [item["product_id"] for item in attrs["items"]]
+        if len(product_ids) != len(set(product_ids)):
+            raise serializers.ValidationError(
+                {"items": "A product may appear only once in a receipt."}
+            )
+        if attrs.get("notes") == "":
+            attrs["notes"] = None
+        return attrs

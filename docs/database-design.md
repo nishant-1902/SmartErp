@@ -400,7 +400,7 @@ places with `ROUND_HALF_UP`, and stores amounts and the tax rate as Decimal128.
 ```javascript
 {
   _id: ObjectId("650000000000000000000008"),
-  receipt_reference: "GRN-2026-000001",
+  receipt_reference: "RCPT-2026-000001",
   purchase_order_id: ObjectId("650000000000000000000007"),
   supplier_id: ObjectId("650000000000000000000006"),
   items: [{
@@ -409,22 +409,23 @@ places with `ROUND_HALF_UP`, and stores amounts and the tax rate as Decimal128.
   }],
   received_by: ObjectId("650000000000000000000001"),
   created_at: ISODate("2026-01-03T00:00:00Z"),
-  idempotency_key: "receive-po-1-2026-01-03"
+  idempotency_key: "e4fb7e89-5e1e-49bd-a13c-b98a6e028415",
+  notes: "Checked against delivery note."
 }
 ```
 
 | Field | Type | Required | Validation / meaning |
 |---|---|---:|---|
-| `receipt_reference` | string | Yes | Unique non-empty receipt number |
+| `receipt_reference` | string | Yes | Unique `RCPT-YYYY-000001` reference |
 | `purchase_order_id`, `supplier_id` | ObjectId | Yes | Related order and supplier |
 | `items` | array | Yes | At least one product ID and positive `quantity_received` pair |
 | `received_by` | ObjectId | Yes | Receiving actor |
 | `created_at` | date | Yes | UTC BSON date |
-| `idempotency_key` | string or null | No | Optional operation key; canonical key record is in `idempotency_keys` |
+| `idempotency_key` | string | Yes | Required UUID operation key; canonical request record is in `idempotency_keys` |
+| `notes` | string or null | Yes | Optional receipt notes |
 
 **Unique constraints:** `receipt_reference`; `(purchase_order_id,
-idempotency_key)` when an idempotency key is present, using a partial unique
-index.
+idempotency_key)` for receipt records that contain a string idempotency key.
 
 **Indexes:** unique receipt reference; `(purchase_order_id, created_at DESC)`;
 `(supplier_id, created_at DESC)`; partial unique `(purchase_order_id,
@@ -433,6 +434,10 @@ idempotency_key)`.
 **Relationships / embed vs reference:** References the PO, supplier, and
 products. A receipt is separate because a PO can be received in multiple
 transactions; bounded received lines are embedded in each receipt.
+Receipt insertion, stock movements, PO received quantities/status, audit
+record, and the idempotency response are committed in one MongoDB transaction.
+Conditional PO-line updates enforce the remaining ordered quantity even when
+receipts race.
 
 **Sample query:** `db.purchase_receipts.find({purchase_order_id: poId}).sort({created_at: -1})`.
 

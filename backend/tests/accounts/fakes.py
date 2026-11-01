@@ -80,8 +80,8 @@ class FakeCollection:
         with self.lock:
             for document in self.documents.values():
                 if self._matches(document, query):
-                    self._apply(document, update)
-                    return SimpleNamespace(matched_count=1)
+                    self._apply(document, update, query)
+                    return SimpleNamespace(matched_count=1, modified_count=1)
             if upsert:
                 document = {
                     key: value
@@ -91,7 +91,7 @@ class FakeCollection:
                 self._apply(document, update)
                 self.insert_one(document)
                 return SimpleNamespace(matched_count=0, upserted_id=document["_id"])
-            return SimpleNamespace(matched_count=0)
+            return SimpleNamespace(matched_count=0, modified_count=0)
 
     def find_one_and_update(
         self,
@@ -107,7 +107,7 @@ class FakeCollection:
             for document in self.documents.values():
                 if self._matches(document, query):
                     before = deepcopy(document)
-                    self._apply(document, update)
+                    self._apply(document, update, query)
                     if return_document == ReturnDocument.AFTER:
                         return deepcopy(document)
                     return before
@@ -133,9 +133,12 @@ class FakeCollection:
         matched_count = 0
         for document in self.documents.values():
             if self._matches(document, query):
-                self._apply(document, update)
+                self._apply(document, update, query)
                 matched_count += 1
-        return SimpleNamespace(matched_count=matched_count)
+        return SimpleNamespace(
+            matched_count=matched_count,
+            modified_count=matched_count,
+        )
 
     def delete_one(self, query: dict[str, Any]) -> SimpleNamespace:
         for document_id, document in self.documents.items():
@@ -145,11 +148,23 @@ class FakeCollection:
         return SimpleNamespace(deleted_count=0)
 
     @staticmethod
-    def _apply(document: dict[str, Any], update: dict[str, Any]) -> None:
+    def _apply(
+        document: dict[str, Any],
+        update: dict[str, Any],
+        query: dict[str, Any] | None = None,
+    ) -> None:
         for key, values in update.get("$set", {}).items():
             document[key] = deepcopy(values)
         for key, amount in update.get("$inc", {}).items():
-            document[key] = document.get(key, 0) + amount
+            if ".$." in key:
+                array_name, nested_field = key.split(".$.", 1)
+                array_query = (query or {}).get(array_name, {}).get("$elemMatch", {})
+                for item in document.get(array_name, []):
+                    if FakeCollection._matches(item, array_query):
+                        item[nested_field] = item.get(nested_field, 0) + amount
+                        break
+            else:
+                document[key] = document.get(key, 0) + amount
         for key, value in update.get("$push", {}).items():
             document.setdefault(key, []).append(deepcopy(value))
 
@@ -175,6 +190,13 @@ class FakeCollection:
                 continue
             actual = document.get(key)
             if isinstance(expected, dict):
+                if "$elemMatch" in expected:
+                    if not isinstance(actual, list) or not any(
+                        cls._matches(item, expected["$elemMatch"])
+                        for item in actual
+                    ):
+                        return False
+                    continue
                 for operator, value in expected.items():
                     if operator == "$regex":
                         flags = re.IGNORECASE if expected.get("$options") == "i" else 0
@@ -190,6 +212,11 @@ class FakeCollection:
                         return False
                     elif operator == "$lte" and (actual is None or actual > value):
                         return False
+                    elif operator == "$elemMatch":
+                        if not isinstance(actual, list) or not any(
+                            cls._matches(item, value) for item in actual
+                        ):
+                            return False
                 continue
             if actual != expected:
                 return False
@@ -248,6 +275,10 @@ class FakeDatabase:
             unique_fields = {
                 "idempotency_keys": (("scope", "key"),),
                 "purchase_orders": (("po_number",),),
+                "purchase_receipts": (
+                    ("receipt_reference",),
+                    ("purchase_order_id", "idempotency_key"),
+                ),
             }.get(collection_name, ())
             self.collections[collection_name] = FakeCollection(unique_fields)
         return self.collections[collection_name]

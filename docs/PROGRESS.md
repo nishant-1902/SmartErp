@@ -1309,4 +1309,67 @@
 
 ### Next step
 
-- Implement purchase receipt processing as a separate step, using the existing transaction/idempotency and stock-movement services. Do not start it as part of this step.
+- Purchase receipt processing is implemented in the following progress entry.
+
+## Backend purchase receipts — part 2
+
+### Files created
+
+- `backend/tests/purchases/test_purchase_receipt_api.py` — tests receipt API behavior, transaction rollback, idempotency, stock movement, audit history, and concurrency.
+
+### Files modified
+
+- `backend/purchases/repository.py` — adds transactional receipt-reference allocation, receipt insertion, guarded PO-line increments, and status updates.
+- `backend/purchases/serializers.py` — validates receipt lines, quantities, unique product IDs, and optional notes.
+- `backend/purchases/services.py` — implements the idempotent transactional receipt flow using the existing stock and audit services.
+- `backend/purchases/views.py` — adds the permission-checked receive endpoint and required idempotency header.
+- `backend/purchases/urls.py` — routes `POST /{id}/receive/` before the detail route.
+- `backend/database/indexes.py` — requires receipt idempotency key and notes fields; retains the unique `(purchase_order_id, idempotency_key)` index.
+- `backend/tests/accounts/fakes.py` — supports positional array increments, conditional array matches, receipt uniqueness, and `modified_count` for transaction tests.
+- `backend/tests/database/test_indexes.py` — asserts the required receipt fields and unique compound index.
+- `docs/api-documentation.md` — documents the receive endpoint, idempotency, and transaction deployment requirement.
+- `docs/database-design.md` — updates the receipt example, reference format, required fields, unique index, and transaction behavior.
+- `docs/PROGRESS.md` — records this step and observed verification.
+
+### Dependencies installed
+
+- None. Existing PyMongo transaction support, shared `common.idempotency`, stock services, and audit-log repository were reused.
+
+### Features completed
+
+- Added `POST /api/purchase-orders/{id}/receive/`, requiring the existing permission-matrix capability `purchase:receive` and a UUID `Idempotency-Key`.
+- Added unique `RCPT-YYYY-000001` references allocated from the counters collection inside the receipt transaction.
+- Inserted purchase receipt documents with PO/supplier IDs, received item quantities, actor, idempotency key, optional notes, and UTC timestamp.
+- The transaction validates PO status and remaining line quantities, writes a receipt, updates stock through `apply_stock_change`, increments PO lines conditionally, updates PO status/history, writes the audit record, and persists the idempotent response.
+- Repeated requests with the same key/body replay the original receipt; a changed body with the same key returns the shared 422 idempotency error.
+- Conditional line updates require `quantity_received <= quantity_ordered - requested_quantity`; a failed match aborts the transaction.
+- Full receipt sets status to `received`; partial receipt sets status to `partially_received`.
+
+### Commands run and observed
+
+- `.\backend\venv\Scripts\python.exe -m pytest -q .\backend\tests\purchases .\backend\tests\inventory .\backend\tests\database` — `103 passed`; Django check also reported no issues on that run.
+- A full-suite run initially found the new fake conditional-update test expected `modified_count` when the fake returned only `matched_count`; the fake was corrected.
+- `.\backend\venv\Scripts\python.exe -m pytest -q .\backend\tests` — `296 passed in 8.62s`.
+- `.\backend\venv\Scripts\python.exe .\backend\manage.py check` — `System check identified no issues (0 silenced).`
+- `.\backend\venv\Scripts\python.exe -m compileall -q .\backend\purchases .\backend\tests\purchases .\backend\tests\accounts\fakes.py .\backend\database\indexes.py .\backend\tests\database\test_indexes.py` — passed with no output.
+- `git diff --check` — passed with no output.
+- Pylance reported no diagnostics in the PO source modules. Its selected interpreter still cannot resolve `pytest` in the receipt test file; the backend virtual-environment test command succeeds.
+
+### Tests passed
+
+- Full backend test suite: 296 passed.
+- Full and partial-then-final receipts, over-receipt rejection, non-receivable status, permission denial, missing/invalid idempotency key, and same-key replay/body mismatch.
+- Later-line failure rolls back preceding stock changes, movements, receipt, PO quantities/status, idempotency record, and audit log.
+- Two concurrent receipt requests do not exceed ordered quantity; the stale conditional PO-line update is also tested directly.
+- Receipt schema/index assertions, Django system check, Python compilation, and whitespace check.
+
+### Known problems and not implemented yet
+
+- MongoDB transaction tests use a serializing in-memory fake. No live replica-set test was run because `MONGO_TEST_URI` is not configured; real transaction retry/write-conflict behavior remains to be verified against an isolated replica set.
+- MongoDB transactions require a replica set or sharded cluster; standalone MongoDB deployments cannot run this receipt flow. Transactions add coordination and resource overhead, so these operations should remain short and database-only.
+- Existing receipt documents that predate `idempotency_key` and `notes` may need a data backfill before applying the stricter collection validator. Run `init_db` only after confirming the isolated/production data migration plan.
+- Frontend purchase receiving UI and live authenticated end-to-end testing are not implemented.
+
+### Next step
+
+- Configure an isolated MongoDB replica set, migrate any existing receipt documents, run `init_db`, and verify concurrent receipt/replay behavior against that database. Stop here until this step is accepted.

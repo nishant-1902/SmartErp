@@ -43,6 +43,7 @@ def test_required_unique_indexes_are_defined():
         ("sales_orders", ("order_number",)),
         ("invoices", ("invoice_number",)),
         ("purchase_receipts", ("receipt_reference",)),
+        ("purchase_receipts", ("purchase_order_id", "idempotency_key")),
         ("idempotency_keys", ("scope", "key")),
     }
     defined = {
@@ -106,6 +107,19 @@ def test_workflow_documents_include_required_inventory_and_order_fields():
             "tax_rate"
         ]["bsonType"]
         == "decimal"
+    )
+    receipt_schema = COLLECTIONS["purchase_receipts"].validator["$jsonSchema"]
+    assert {"idempotency_key", "notes"} <= set(receipt_schema["required"])
+    receipt_indexes = COLLECTIONS["purchase_receipts"].indexes
+    order_idempotency_index = next(
+        index
+        for index in receipt_indexes
+        if index.name == "uq_receipts_order_idempotency"
+    )
+    assert order_idempotency_index.unique is True
+    assert order_idempotency_index.keys == (
+        ("purchase_order_id", 1),
+        ("idempotency_key", 1),
     )
     assert "min_stock_level" in product_fields
     assert {"quantity_change", "reserved_change", "performed_by"} <= movement_fields
