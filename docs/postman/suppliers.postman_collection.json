@@ -1,0 +1,171 @@
+{
+  "info": {
+    "_postman_id": "bbd300c7-41e2-49e9-86d4-0dd8f734e01a",
+    "name": "SmartERP Suppliers",
+    "description": "Supplier API success and negative requests. Set base_url and access_token collection variables first.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000/api"
+    },
+    {
+      "key": "access_token",
+      "value": ""
+    },
+    {
+      "key": "employee_access_token",
+      "value": ""
+    },
+    {
+      "key": "supplier_id",
+      "value": ""
+    },
+    {
+      "key": "created_supplier_code",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Success - List and search suppliers",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/suppliers/?page=1&page_size=20&search=Northwind&status=active&sort_by=name&sort_order=asc"
+      }
+    },
+    {
+      "name": "Success - Create supplier with generated code",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (pm.response.code === 201) {",
+              "  const supplier = pm.response.json().data.supplier;",
+              "  pm.collectionVariables.set('supplier_id', supplier.id);",
+              "  pm.collectionVariables.set('created_supplier_code', supplier.code);",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Postman Northwind Supply\",\n  \"contact_person\": \"Ada Lovelace\",\n  \"email\": \"buying@example.com\",\n  \"phone\": \"+1 (415) 555-0123\",\n  \"address\": {\n    \"line1\": \"1 Main Street\",\n    \"city\": \"London\",\n    \"country\": \"United Kingdom\"\n  },\n  \"status\": \"active\",\n  \"payment_terms\": \"Net 30\"\n}"
+        },
+        "url": "{{base_url}}/suppliers/"
+      }
+    },
+    {
+      "name": "Success - Get supplier",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/suppliers/{{supplier_id}}/"
+      }
+    },
+    {
+      "name": "Success - Patch supplier",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"payment_terms\": \"Net 45\"\n}"
+        },
+        "url": "{{base_url}}/suppliers/{{supplier_id}}/"
+      }
+    },
+    {
+      "name": "Success - Supplier purchase history",
+      "description": "Requires a user with purchase:read, such as a Purchase Manager, Inventory Manager, or Super Admin.",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/suppliers/{{supplier_id}}/purchase-orders/?page=1&page_size=20"
+      }
+    },
+    {
+      "name": "Negative - Duplicate supplier code",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"code\": \"{{created_supplier_code}}\",\n  \"name\": \"Duplicate Supplier\"\n}"
+        },
+        "url": "{{base_url}}/suppliers/"
+      }
+    },
+    {
+      "name": "Negative - Invalid supplier ObjectId",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/suppliers/not-an-object-id/"
+      }
+    },
+    {
+      "name": "Negative - Employee role cannot write",
+      "request": {
+        "method": "POST",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{employee_access_token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Forbidden Supplier\"\n}"
+        },
+        "url": "{{base_url}}/suppliers/"
+      }
+    },
+    {
+      "name": "Negative - Invalid list filter",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/suppliers/?status=unknown"
+      }
+    }
+  ]
+}

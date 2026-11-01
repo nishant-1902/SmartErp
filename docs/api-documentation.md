@@ -7,6 +7,116 @@ success/error envelopes. Department list endpoints use `page` (default `1`) and
 `page_size` (default `20`, maximum `100`). Search is a literal, case-insensitive
 substring search. Sort fields are explicitly allowlisted.
 
+## Suppliers
+
+Supplier endpoints require a bearer access token. Supplier list and detail reads
+require `suppliers:read`; writes require `suppliers:write` (Purchase Manager or
+Super Admin). Supplier purchase history requires `purchase:read` (Purchase
+Manager, Inventory Manager, or Super Admin).
+
+### List suppliers
+
+- **Method:** `GET`
+- **URL:** `/api/suppliers/`
+- **Purpose:** Return a paginated, searchable supplier list.
+- **Query parameters:** `page` (default `1`), `page_size` (default `20`,
+  maximum `100`), `search`, `status` (`active` or `inactive`), `sort_by`
+  (`code`, `name`, `contact_person`, `email`, `status`, `created_at`, or
+  `updated_at`), and `sort_order` (`asc` or `desc`).
+- **Success response (`200`):** Standard success envelope with
+  `data.suppliers` and pagination metadata.
+- **Validation:** Search is a literal, case-insensitive match against code,
+  name, contact person, email, or phone. Unknown/unsafe query keys, invalid
+  statuses, and unsupported sort fields are rejected.
+- **Status codes:** `200`, `400`, `401`, `403`.
+
+### Create supplier
+
+- **Method:** `POST`
+- **URL:** `/api/suppliers/`
+- **Purpose:** Create a supplier record.
+- **Role:** Purchase Manager or Super Admin (`suppliers:write`).
+- **Request body:**
+
+  ```json
+  {
+    "name": "Northwind Supply",
+    "contact_person": "Ada Lovelace",
+    "email": "buying@example.com",
+    "phone": "+1 (415) 555-0123",
+    "address": {
+      "line1": "1 Main Street",
+      "line2": null,
+      "city": "London",
+      "region": null,
+      "postal_code": "SW1A 1AA",
+      "country": "United Kingdom"
+    },
+    "status": "active",
+    "payment_terms": "Net 30"
+  }
+  ```
+
+- **Optional field:** `code`. When omitted, the API atomically allocates a
+  `SUP-000001` style code using the MongoDB `counters` collection.
+- **Success response (`201`):** Standard success envelope with `data.supplier`.
+- **Validation:** Code is uppercased and unique. Email is validated and stored
+  lowercase; phone accepts 7–15 digits with an optional leading `+` and common
+  separators, and is stored without separators. Address is either `null` or an
+  object with `line1`, `city`, and `country`; other address fields are optional.
+  Status is `active` or `inactive`. Unknown/unsafe keys are rejected.
+- **Status codes:** `201`, `400`, `401`, `403`, `409`.
+
+### Get supplier
+
+- **Method:** `GET`
+- **URL:** `/api/suppliers/{id}/`
+- **Purpose:** Return one supplier.
+- **Role:** `suppliers:read`.
+- **Success response (`200`):** Standard success envelope with `data.supplier`.
+- **Validation:** `{id}` must be a valid MongoDB ObjectId.
+- **Status codes:** `200`, `400`, `401`, `403`, `404`.
+
+### Update supplier
+
+- **Method:** `PATCH`
+- **URL:** `/api/suppliers/{id}/`
+- **Purpose:** Update a non-empty subset of supplier fields.
+- **Role:** Purchase Manager or Super Admin (`suppliers:write`).
+- **Request body:** Any non-empty subset of `code`, `name`, `contact_person`,
+  `email`, `phone`, `address`, `status`, and `payment_terms`. Replacing a
+  non-null address requires the full address shape.
+- **Success response (`200`):** Standard success envelope with `data.supplier`.
+- **Validation:** Field rules match create; duplicate codes return `409`.
+  Supplier records are retained when their status changes to inactive.
+- **Status codes:** `200`, `400`, `401`, `403`, `404`, `409`.
+
+### Supplier purchase history
+
+- **Method:** `GET`
+- **URL:** `/api/suppliers/{id}/purchase-orders/`
+- **Purpose:** Return paginated purchase history and outstanding purchase
+  orders, each with its own pagination metadata.
+- **Role:** `purchase:read`.
+- **Query parameters:** `page` (default `1`) and `page_size` (default `20`,
+  maximum `100`), applied separately to both lists.
+- **Success response (`200`):** Standard success envelope with
+  `data.purchase_orders`, `data.outstanding_purchase_orders`, and corresponding
+  pagination metadata under `meta.purchase_orders` and
+  `meta.outstanding_purchase_orders`. Each item includes
+  `quantity_outstanding` (`quantity_ordered - quantity_received`).
+- **Outstanding definition:** Includes `pending_approval`, `approved`, and
+  `partially_received` orders. Draft, received, rejected, and cancelled orders
+  remain in the full purchase history but are not outstanding.
+- **Validation:** `{id}` must be a valid ObjectId; a missing supplier returns
+  `404`. The route is declared before the supplier detail route.
+- **Status codes:** `200`, `400`, `401`, `403`, `404`.
+
+Inactive supplier check: purchase-order creation must call the reusable
+`require_active_supplier` service before creating a new order. The purchase-order
+creation/workflow endpoints are not implemented yet, so there is currently no
+PO creation API on which to enforce this check.
+
 ## Employees
 
 ### List employees

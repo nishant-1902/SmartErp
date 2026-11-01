@@ -779,6 +779,68 @@
 ### Known problems
 
 - Employee, department, inventory, and sales links are permission-filtered but intentionally disabled until those business pages are implemented.
+
+## 2026-11-01 — Supplier API
+
+### Files created
+
+- `backend/suppliers/serializers.py` — strict serializers for supplier create/update, nested addresses, list filters, and purchase-history pagination.
+- `backend/suppliers/repository.py` — PyMongo supplier reads/writes, escaped search, status filtering, atomic supplier-code counters, and purchase-order history queries.
+- `backend/suppliers/services.py` — supplier business rules, unique-code checks, JSON-safe responses, purchase-history pagination, and `require_active_supplier` for future PO creation.
+- `backend/suppliers/urls.py` — supplier routes; purchase history is declared before the supplier detail route.
+- `backend/tests/suppliers/test_supplier_api.py` — API, validation, permissions, generated codes, purchase history, and inactive-supplier guard tests.
+- `docs/postman/suppliers.postman_collection.json` — nine supplier success and negative requests.
+
+### Files modified
+
+- `backend/suppliers/views.py` — replaced the placeholder with authenticated list/create/detail/update and purchase-history endpoints.
+- `backend/config/urls.py` — mounted `/api/suppliers/`.
+- `backend/tests/accounts/fakes.py` — taught the shared Mongo fake to support atomic counter upserts and `$in` filters needed by supplier behavior.
+- `docs/api-documentation.md` — documented supplier routes, permission roles, fields, validation, and history/open-order status rules.
+- `docs/PROGRESS.md` — recorded this implementation and validation results.
+
+### Dependencies installed
+
+- None. Existing Django REST Framework and PyMongo dependencies were reused.
+
+### Commands run and observed
+
+- The first focused-test invocations used an incorrect relative path and failed with PowerShell `CommandNotFoundException`. The corrected command was run from `backend\`.
+- `.\venv\Scripts\python.exe -m pytest -q tests\suppliers` from `backend\` — `27 passed in 0.36s`.
+- `.\venv\Scripts\python.exe -m pytest -q tests` from `backend\` — `231 passed in 6.02s`.
+- `.\venv\Scripts\python.exe manage.py check` from `backend\` — `System check identified no issues (0 silenced).`
+- An initial JSON-check one-liner had quoting syntax errors; reran with PowerShell `ConvertFrom-Json` — `Valid Postman JSON: docs\postman\suppliers.postman_collection.json (9 requests)`.
+- `git diff --check` — passed with no output.
+- Python line-length check on new supplier source and tests — `Python lines over 99 characters: 0`.
+
+### Features completed
+
+- Implemented `GET/POST /api/suppliers/`, `GET/PATCH /api/suppliers/{id}/`, and `GET /api/suppliers/{id}/purchase-orders/`.
+- Supplier reads use the existing `suppliers:read` permission; create/update require `suppliers:write` (Purchase Manager or Super Admin). Purchase history requires `purchase:read`.
+- Supplier codes are normalized and unique; missing codes use an atomic MongoDB `counters` update and the `SUP-000001` format.
+- Added validated contact fields, nested addresses, active/inactive status, UTC timestamps, escaped search, status filters, bounded pagination, and allowlisted sorting.
+- Supplier purchase history includes all statuses; outstanding orders include `pending_approval`, `approved`, and `partially_received`. Each list is paginated independently and item-level outstanding quantities are calculated.
+- Added and tested `require_active_supplier` to reject inactive suppliers before a PO is created.
+- Reused the supplier collection's existing MongoDB schema validator and unique/search indexes; no index migration or dependency change was needed.
+
+### Tests passed
+
+- Focused supplier API suite: 27 passed.
+- Complete backend suite: 231 passed.
+- Django system check: passed.
+- Supplier Postman JSON: parsed successfully (9 requests).
+- `git diff --check`: passed.
+- New Python source/test line-length check: passed.
+
+### Known problems
+
+- No live MongoDB replica-set test was run because no test URI/configuration was provided.
+- Purchase-order create/workflow endpoints do not exist yet. The inactive-supplier guard is implemented and tested but is not yet called by a PO-creation service; enforcing the rule end-to-end remains pending that module.
+- The Postman collection was syntax-validated but not executed against a running API; it requires a Purchase Manager/Super Admin access token and a configured backend.
+
+### Next step
+
+- When the purchase module is implemented, call `require_active_supplier` in its PO-creation service and run the supplier/PO workflow against the configured MongoDB replica set.
 - Real API login, cookies, and logout were not tested because the backend was not running/configured in this browser session.
 - The package install reported two moderate audit vulnerabilities; dependency audit/fixes are outside this UI-foundation step.
 

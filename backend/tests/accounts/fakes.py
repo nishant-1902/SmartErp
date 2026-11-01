@@ -99,6 +99,7 @@ class FakeCollection:
         update: dict[str, Any],
         *,
         return_document: ReturnDocument = ReturnDocument.BEFORE,
+        upsert: bool = False,
         **kwargs: Any,
     ) -> dict[str, Any] | None:
         """Atomically match, update, and return a fake document."""
@@ -110,6 +111,17 @@ class FakeCollection:
                     if return_document == ReturnDocument.AFTER:
                         return deepcopy(document)
                     return before
+            if upsert:
+                document = {
+                    key: deepcopy(value)
+                    for key, value in query.items()
+                    if not key.startswith("$") and not isinstance(value, dict)
+                }
+                self._apply(document, update)
+                self.insert_one(document)
+                if return_document == ReturnDocument.AFTER:
+                    return deepcopy(document)
+                return None
             return None
 
     def update_many(
@@ -168,6 +180,8 @@ class FakeCollection:
                             return False
                     elif operator == "$options":
                         continue
+                    elif operator == "$in" and actual not in value:
+                        return False
                     elif operator == "$ne" and actual == value:
                         return False
                     elif operator == "$gte" and (actual is None or actual < value):

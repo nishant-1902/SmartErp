@@ -28,6 +28,7 @@ urlpatterns = [
     path("api/audit-logs/", include("accounts.audit_urls")),
     path("api/departments/", include("departments.urls")),
     path("api/employees/", include("employees.urls")),
+    path("api/suppliers/", include("suppliers.urls")),
     path("api/products/", include("inventory.urls")),
     path("api/stock-adjustments/", include("inventory.stock_urls")),
     path("api/stock-movements/", include("inventory.movement_urls")),
