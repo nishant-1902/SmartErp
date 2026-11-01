@@ -150,6 +150,8 @@ class FakeCollection:
             document[key] = deepcopy(values)
         for key, amount in update.get("$inc", {}).items():
             document[key] = document.get(key, 0) + amount
+        for key, value in update.get("$push", {}).items():
+            document.setdefault(key, []).append(deepcopy(value))
 
     @classmethod
     def _matches(cls, document: dict[str, Any], query: dict[str, Any]) -> bool:
@@ -243,10 +245,9 @@ class FakeDatabase:
 
     def __getitem__(self, collection_name: str) -> FakeCollection:
         if collection_name not in self.collections:
-            unique_fields = (
-                (("scope", "key"),)
-                if collection_name == "idempotency_keys"
-                else ()
-            )
+            unique_fields = {
+                "idempotency_keys": (("scope", "key"),),
+                "purchase_orders": (("po_number",),),
+            }.get(collection_name, ())
             self.collections[collection_name] = FakeCollection(unique_fields)
         return self.collections[collection_name]

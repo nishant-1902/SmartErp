@@ -345,6 +345,7 @@ details change. The supplier itself remains independently editable.
     line_total: Decimal128("375.00")
   }],
   status: "pending_approval",
+  tax_rate: Decimal128("10.00"),
   subtotal: Decimal128("375.00"),
   tax_total: Decimal128("37.50"),
   grand_total: Decimal128("412.50"),
@@ -368,6 +369,7 @@ details change. The supplier itself remains independently editable.
 | `supplier_snapshot` | object | Yes | Embedded historical supplier identity |
 | `items` | array | Yes | At least one item with product ID, SKU/name snapshot, positive `quantity_ordered`, non-negative `quantity_received`, Decimal128 unit cost and line total |
 | `status` | string | Yes | `draft`, `pending_approval`, `approved`, `rejected`, `partially_received`, `received`, or `cancelled` |
+| `tax_rate` | Decimal128 | Yes | Per-order percentage from 0 to 100 |
 | `subtotal`, `tax_total`, `grand_total` | Decimal128 | Yes | Server-calculated, non-negative money |
 | `approved_by` | ObjectId or null | No | Approver when approved |
 | `status_history` | array | Yes | Status, actor, UTC time, optional note for each transition |
@@ -381,6 +383,11 @@ created_at DESC)`.
 **Relationships / embed vs reference:** References supplier and products;
 embeds bounded line and supplier snapshots for purchase detail reads and
 historical pricing. Receipts stay separate because one PO can have many.
+
+Duplicate product IDs in one PO are rejected with a validation error. The API
+accepts a per-order tax percentage; it calculates line totals, subtotal, tax,
+and grand total on the server using `Decimal`, rounds monetary amounts to two
+places with `ROUND_HALF_UP`, and stores amounts and the tax rate as Decimal128.
 
 **Sample queries:** `db.purchase_orders.find({status: "pending_approval"}).sort({created_at: -1})`; `db.purchase_orders.find({supplier_id: supplierId}).sort({created_at: -1})`.
 

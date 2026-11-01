@@ -53,6 +53,7 @@ PURCHASE_ORDER_RESPONSE_FIELDS = (
     "supplier_snapshot",
     "items",
     "status",
+    "tax_rate",
     "subtotal",
     "tax_total",
     "grand_total",

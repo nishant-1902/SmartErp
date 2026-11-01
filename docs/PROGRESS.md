@@ -1244,3 +1244,69 @@
 ### Next step
 
 - Exercise the new pages against a configured authenticated backend, then continue integrating purchase and sales workflows through the stock engine.
+
+## Backend purchase orders — part 1
+
+### Files created
+
+- `backend/purchases/repository.py` — PyMongo reads/writes, yearly counter allocation, Draft updates, and conditional status updates.
+- `backend/purchases/serializers.py` — strict request validation for PO bodies, list filters, decimal inputs, and rejection reasons.
+- `backend/purchases/services.py` — active supplier/product checks, snapshots, Decimal calculations, duplicate-product rejection, and the explicit `TRANSITIONS` state machine.
+- `backend/purchases/urls.py` — purchase-order routes.
+- `backend/tests/purchases/test_purchase_order_api.py` — API, permissions, calculation, transition, numbering, and concurrent-approval tests.
+
+### Files modified
+
+- `backend/purchases/views.py` — replaced the placeholder with authenticated, permission-checked PO endpoints.
+- `backend/config/urls.py` — mounted `/api/purchase-orders/`.
+- `backend/database/indexes.py` — added the required Decimal128 `tax_rate` field and its 0–100 validator.
+- `backend/suppliers/repository.py` — included the stored tax rate in supplier purchase-history records.
+- `backend/tests/accounts/fakes.py` — added atomic `$push` behavior and PO-number uniqueness for in-memory tests.
+- `backend/tests/database/test_indexes.py` — asserted the PO tax-rate schema.
+- `docs/api-documentation.md` — documented the PO endpoints, calculations, permissions, and transitions.
+- `docs/database-design.md` — documented the stored tax rate, rounding policy, and duplicate-product policy.
+- `docs/PROGRESS.md` — recorded this step and its verification.
+
+### Dependencies installed
+
+- None. Existing Django REST Framework, PyMongo, BSON Decimal128, and pytest dependencies were reused.
+
+### Features completed
+
+- Implemented paginated `GET` and `POST /api/purchase-orders/`, plus detail `GET` and Draft-only `PATCH`.
+- Implemented `submit`, `approve`, `reject`, and `cancel` actions with an explicit transition table. Invalid transitions return HTTP 409.
+- Added conditional Mongo status updates that append history atomically and allow only one simultaneous approval.
+- Enforced backend permission-matrix checks and creator/approver separation, except for Super Admin.
+- Required active suppliers and products on creation and Draft edits; checked them again before submission.
+- Generated unique `PO-YYYY-000001` numbers through an atomic yearly counter.
+- Built supplier/product snapshots on the server; rejected duplicate product IDs and non-positive/non-integer quantities.
+- Accepted a per-order `tax_rate` (0–100, as an exact decimal string) and calculated line totals, subtotal, tax, and grand total on the server with Decimal, `ROUND_HALF_UP`, and Decimal128 storage. Client-supplied totals are ignored.
+
+### Commands run and observed
+
+- `.\backend\venv\Scripts\python.exe -m pytest -q .\backend\tests` — `285 passed in 10.02s`.
+- `.\backend\venv\Scripts\python.exe .\backend\manage.py check` — `System check identified no issues (0 silenced).`
+- `.\backend\venv\Scripts\python.exe -m compileall -q .\backend\purchases .\backend\tests\purchases\test_purchase_order_api.py .\backend\database\indexes.py .\backend\tests\database\test_indexes.py` — passed with no output.
+- `git diff --check` — passed with no output.
+- Pylance diagnostics for the four new PO source modules — no diagnostics.
+- A focused run of purchases, supplier, and database tests reported `93 passed`; the final full-suite run above includes all changes.
+
+### Tests passed
+
+- Full backend test suite: 285 passed.
+- All five valid transitions and all 23 invalid action/status combinations.
+- Atomic yearly PO-number allocation under concurrent calls.
+- Double-approval race with both callers synchronized after reading the same pending state; exactly one approval was recorded.
+- Decimal tax rounding, ignored client totals, permission checks, active/missing master records, Draft-only edits, strict input validation, and schema assertions.
+- Django system check, Python compilation, and diff whitespace check.
+
+### Known problems and not implemented yet
+
+- No live MongoDB integration was run because `MONGO_TEST_URI` is not configured. The tests use the in-memory fake; configure an isolated replica set and run the database initializer before live validation.
+- The database validator now requires `tax_rate`; if purchase-order documents already exist, backfill that field before updating or editing legacy Draft orders.
+- Receiving/receipt endpoints, receipt idempotency, purchase stock movements/transactions, and frontend purchase-order pages are not implemented in part 1.
+- Pylance's currently selected interpreter reports that it cannot resolve `pytest` in the new test file; the project virtual environment runs the full test suite successfully.
+
+### Next step
+
+- Implement purchase receipt processing as a separate step, using the existing transaction/idempotency and stock-movement services. Do not start it as part of this step.

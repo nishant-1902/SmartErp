@@ -312,8 +312,8 @@ COLLECTIONS: dict[str, CollectionDefinition] = {
         validator=_schema(
             (
                 "po_number", "supplier_id", "supplier_snapshot", "items", "status",
-                "subtotal", "tax_total", "grand_total", "created_by", "created_at",
-                "updated_at", "status_history",
+                "tax_rate", "subtotal", "tax_total", "grand_total", "created_by",
+                "created_at", "updated_at", "status_history",
             ),
             {
                 "po_number": {"bsonType": "string", "minLength": 1, "maxLength": 40},
@@ -348,6 +348,11 @@ COLLECTIONS: dict[str, CollectionDefinition] = {
                         "draft", "pending_approval", "approved", "rejected",
                         "partially_received", "received", "cancelled",
                     ]
+                },
+                "tax_rate": {
+                    "bsonType": "decimal",
+                    "minimum": 0,
+                    "maximum": 100,
                 },
                 "subtotal": {"bsonType": "decimal", "minimum": 0},
                 "tax_total": {"bsonType": "decimal", "minimum": 0},

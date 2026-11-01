@@ -100,6 +100,13 @@ def test_workflow_documents_include_required_inventory_and_order_fields():
 
     assert {"quantity_ordered", "quantity_received"} <= purchase_item_fields
     assert "status_history" in purchase_fields
+    assert "tax_rate" in purchase_fields
+    assert (
+        COLLECTIONS["purchase_orders"].validator["$jsonSchema"]["properties"][
+            "tax_rate"
+        ]["bsonType"]
+        == "decimal"
+    )
     assert "min_stock_level" in product_fields
     assert {"quantity_change", "reserved_change", "performed_by"} <= movement_fields
     movement_properties = COLLECTIONS["stock_movements"].validator["$jsonSchema"][
