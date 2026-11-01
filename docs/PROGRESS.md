@@ -1373,3 +1373,83 @@
 ### Next step
 
 - Configure an isolated MongoDB replica set, migrate any existing receipt documents, run `init_db`, and verify concurrent receipt/replay behavior against that database. Stop here until this step is accepted.
+
+## Purchasing React frontend and date filters
+
+### Files created
+
+- `frontend/src/services/supplierService.js` — API wrappers for supplier directory, CRUD, and purchase history.
+- `frontend/src/services/purchaseOrderService.js` — API wrappers for PO lists, CRUD, transitions, and receipt requests.
+- `frontend/src/utils/purchasePreview.js` — integer-minor-unit arithmetic for the PO form's explicitly non-authoritative estimate.
+- `frontend/src/components/SupplierFormModal.jsx` — create/edit supplier fields, postal address, and active status.
+- `frontend/src/components/PurchaseOrderProductPicker.jsx` — debounced active-product search for PO lines.
+- `frontend/src/components/PurchaseOrderRejectModal.jsx` — collects the required rejection reason.
+- `frontend/src/components/PurchaseOrderReceiveModal.jsx` — limits each receipt line to the remaining quantity and generates/reuses an idempotency key for the same retry payload.
+- `frontend/src/pages/Suppliers.jsx` — supplier directory, status/search filters, and permission-gated create/edit actions.
+- `frontend/src/pages/SupplierDetail.jsx` — supplier contact details, postal address, outstanding orders, and purchase history.
+- `frontend/src/pages/Purchases.jsx` — PO list, status badges, supplier/status/date filters, and create action.
+- `frontend/src/pages/PurchaseOrderForm.jsx` — create/edit Draft form using React Hook Form `useFieldArray`, searched product selection, client preview, and server validation errors.
+- `frontend/src/pages/PurchaseOrderDetail.jsx` — item totals, status timeline, permission/status-gated transitions, rejection/receipt modals, and cancellation confirmation.
+- `frontend/src/utils/purchasePreview.test.js` — preview precision and validation tests.
+- `frontend/src/services/purchaseOrderService.test.js` — receipt endpoint and idempotency-header contract test.
+- `frontend/src/components/PurchaseOrderReceiveModal.test.jsx` — remaining-quantity, empty receipt, and retry-key behavior tests.
+- `frontend/src/pages/Suppliers.test.jsx` — supplier creation and permission-gating tests.
+- `frontend/src/pages/SupplierDetail.test.jsx` — supplier details/history tests.
+- `frontend/src/pages/Purchases.test.jsx` — status/supplier/date filter tests.
+- `frontend/src/pages/PurchaseOrderForm.test.jsx` — searchable line item, preview disclaimer, and payload test.
+- `frontend/src/pages/PurchaseOrderDetail.test.jsx` — self-approval hiding and idempotent receipt submission test.
+
+### Files modified
+
+- `frontend/src/App.jsx` — registers permission-gated supplier and purchase routes.
+- `frontend/src/config/navigation.js` — adds Suppliers and Purchase orders navigation entries.
+- `frontend/src/utils/apiErrors.js` — maps PO/supplier fields, including nested address errors, into form errors.
+- `backend/purchases/serializers.py` — validates optional timezone-aware PO `start_date`/`end_date` list filters and rejects reversed ranges.
+- `backend/purchases/repository.py` — applies the creation-time range to the PO list and count queries.
+- `backend/purchases/services.py` — passes validated date filters through the list service.
+- `backend/purchases/views.py` — wires validated date filters into PO listing.
+- `backend/tests/purchases/test_purchase_order_api.py` — verifies date filtering and invalid ranges.
+- `docs/api-documentation.md` — documents PO creation-date filters.
+- `docs/PROGRESS.md` — records this implementation and verification.
+
+### Dependencies installed
+
+- None. Existing React Hook Form, Yup, Axios, React Bootstrap, and test dependencies were reused.
+
+### Features completed
+
+- Added searchable supplier management with create/edit, contact/address details, and active/inactive status.
+- Added supplier detail with outstanding purchase orders and paginated purchase history.
+- Added purchase-order browsing with status badges and status, supplier, and creation-date filters. The backend now validates and applies timezone-aware `start_date`/`end_date` filters so the date controls are server-backed.
+- Added a dynamic PO form using `useFieldArray`; it searches active products, rejects duplicate selected product lines, uses decimal strings for prices, and shows an integer-cent preview clearly labeled as an estimate. The server remains authoritative for final totals.
+- Added purchase-order detail and a status timeline. Submit, approve, reject, receive, edit, and cancel controls are gated by the current permission and workflow state; the creator cannot see their own approval action unless they are Super Admin.
+- Added a rejection-reason modal, a per-line receipt modal capped to each line's remaining quantity, and a cancellation confirmation.
+- Receipt submission generates a UUID idempotency key and preserves it when retrying the same unchanged payload. Changed payloads use a new key.
+- Backend validation messages are shown in the page/form/modal and field-specific messages are attached to form fields where possible.
+
+### Commands run and observed
+
+- `Set-Location .\frontend; npm test` — `Test Files 29 passed (29); Tests 82 passed (82)`.
+- `Set-Location .\frontend; npm run lint` — exited `0`; no lint diagnostics.
+- `Set-Location .\frontend; npm run build` — exited `0`; Vite transformed 384 modules and completed the production build.
+- `.\backend\venv\Scripts\python.exe -m pytest -q .\backend\tests` — `297 passed in 22.72s`.
+- `.\backend\venv\Scripts\python.exe .\backend\manage.py check` — `System check identified no issues (0 silenced).`
+- `git diff --check` — exited `0`; no whitespace errors.
+- An initial frontend run exposed a brittle assertion about text split by address line breaks; the assertion was corrected, then the full frontend suite passed.
+
+### Tests passed
+
+- Full frontend suite: 82 passed across 29 test files.
+- Full backend suite: 297 passed, including PO date filters and existing purchase/receipt workflow coverage.
+- Frontend lint, production build, Django system check, and diff whitespace check passed.
+
+### Known problems and not implemented yet
+
+- No live authenticated browser-to-Django/MongoDB end-to-end session was run; UI API behavior is tested with mocked services.
+- Existing receipt transaction tests use the in-memory fake. A live transaction/replay/concurrency check still requires the isolated MongoDB replica set described in the receipt section above.
+- Supplier choices in the PO form and PO supplier filter initially load the first API page (up to 100 suppliers); remote supplier search is not implemented in those controls.
+- No requested purchasing UI feature is intentionally left unimplemented.
+
+### Next step
+
+- Run a live authenticated walkthrough of supplier management, PO creation/approval, and receiving against the configured application; separately verify receipt transactions against a replica set. Stop until this step is accepted.

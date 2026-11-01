@@ -134,10 +134,22 @@ class PurchaseOrderListQuerySerializer(StrictSerializer):
         required=False,
     )
     supplier_id = serializers.CharField(required=False, trim_whitespace=True)
+    start_date = serializers.DateTimeField(required=False)
+    end_date = serializers.DateTimeField(required=False)
 
     def validate_supplier_id(self, value):
         """Parse supplier IDs before passing them to a service or query."""
         return parse_object_id(value)
+
+    def validate(self, attrs):
+        """Require a chronological range for creation-time filters."""
+        start_date = attrs.get("start_date")
+        end_date = attrs.get("end_date")
+        if start_date is not None and end_date is not None and start_date > end_date:
+            raise serializers.ValidationError(
+                {"end_date": "End date must be on or after the start date."}
+            )
+        return attrs
 
 
 class RejectPurchaseOrderSerializer(StrictSerializer):

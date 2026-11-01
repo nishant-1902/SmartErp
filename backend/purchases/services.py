@@ -1,6 +1,7 @@
 """Purchase-order business rules, totals, and status transitions."""
 
 from collections.abc import Mapping
+from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
@@ -156,6 +157,8 @@ def list_purchase_orders(
     *,
     status: str | None,
     supplier_id: ObjectId | None,
+    start_date: datetime | None,
+    end_date: datetime | None,
     pagination: Pagination,
 ) -> tuple[list[dict[str, Any]], dict[str, int]]:
     """Return a paginated purchase-order list and metadata."""
@@ -163,6 +166,8 @@ def list_purchase_orders(
         database,
         status=status,
         supplier_id=supplier_id,
+        start_date=start_date,
+        end_date=end_date,
         skip=pagination.skip,
         limit=pagination.limit,
     )
@@ -170,6 +175,8 @@ def list_purchase_orders(
         database,
         status=status,
         supplier_id=supplier_id,
+        start_date=start_date,
+        end_date=end_date,
     )
     return [_public_order(order) for order in orders], pagination.build_meta(total)
 

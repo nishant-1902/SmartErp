@@ -80,6 +80,20 @@ export const navigationItems = [
     implemented: true,
   },
   {
+    label: 'Suppliers',
+    path: '/suppliers',
+    icon: '▣',
+    requiredPermission: 'suppliers:read',
+    implemented: true,
+  },
+  {
+    label: 'Purchase orders',
+    path: '/purchase-orders',
+    icon: '▤',
+    requiredPermission: 'purchase:read',
+    implemented: true,
+  },
+  {
     label: 'Sales',
     path: '/sales',
     icon: '↗',

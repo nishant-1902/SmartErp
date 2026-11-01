@@ -122,7 +122,10 @@ their matching `purchase:submit`, `purchase:approve`, `purchase:reject`, or
 ### List and create purchase orders
 
 - **Methods and URLs:** `GET` and `POST` `/api/purchase-orders/`.
-- **List filters:** `page`, `page_size`, `status`, and `supplier_id`.
+- **List filters:** `page`, `page_size`, `status`, `supplier_id`, `start_date`,
+  and `end_date`. The date filters are timezone-aware ISO-8601 datetimes and
+  match the PO creation timestamp; when both are supplied, start must not be
+  after end.
 - **Create body:** `supplier_id`, `items` (each with `product_id`,
   `quantity_ordered`, and `unit_cost`), and `tax_rate` as a decimal percentage
   from `0` to `100`.

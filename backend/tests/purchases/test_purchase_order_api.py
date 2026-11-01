@@ -1,7 +1,7 @@
 """API, calculation, permission, and concurrency tests for purchase orders."""
 
 from concurrent.futures import ThreadPoolExecutor
-from datetime import timezone
+from datetime import datetime, timezone
 from threading import Barrier, Lock
 from uuid import uuid4
 
@@ -666,3 +666,41 @@ def test_get_list_and_invalid_object_id(client, purchase_api):
     assert listing.json()["data"]["purchase_orders"][0]["id"] == order_id
     assert listing.json()["meta"]["total"] == 1
     assert invalid.status_code == 400
+
+
+def test_list_filters_purchase_orders_by_creation_date(client, purchase_api):
+    manager = insert_user(purchase_api, "purchase_manager")
+    supplier = insert_supplier(purchase_api)
+    product = insert_product(purchase_api)
+    older = create_order(client, manager, supplier, product)
+    included = create_order(client, manager, supplier, product)
+    older_id = ObjectId(older.json()["data"]["purchase_order"]["id"])
+    included_id = ObjectId(included.json()["data"]["purchase_order"]["id"])
+    purchase_api["purchase_orders"].update_one(
+        {"_id": older_id},
+        {"$set": {"created_at": datetime(2024, 12, 31, tzinfo=timezone.utc)}},
+    )
+    purchase_api["purchase_orders"].update_one(
+        {"_id": included_id},
+        {"$set": {"created_at": datetime(2025, 1, 15, tzinfo=timezone.utc)}},
+    )
+
+    response = client.get(
+        "/api/purchase-orders/"
+        "?start_date=2025-01-01T00:00:00Z"
+        "&end_date=2025-01-31T23:59:59.999Z",
+        **auth_headers(manager),
+    )
+    invalid_range = client.get(
+        "/api/purchase-orders/"
+        "?start_date=2025-02-01T00:00:00Z"
+        "&end_date=2025-01-31T23:59:59.999Z",
+        **auth_headers(manager),
+    )
+
+    assert response.status_code == 200
+    assert [
+        order["id"] for order in response.json()["data"]["purchase_orders"]
+    ] == [str(included_id)]
+    assert response.json()["meta"]["total"] == 1
+    assert invalid_range.status_code == 400

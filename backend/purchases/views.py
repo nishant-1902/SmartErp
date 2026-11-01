@@ -80,6 +80,8 @@ def purchase_orders_list_create_view(request):
                 database,
                 status=filters.get("status"),
                 supplier_id=filters.get("supplier_id"),
+                start_date=filters.get("start_date"),
+                end_date=filters.get("end_date"),
                 pagination=_pagination(filters),
             )
         return success_response({"purchase_orders": orders}, meta=meta)

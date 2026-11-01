@@ -74,6 +74,22 @@ export function applyApiFieldErrors(details, setError) {
     'quantity_change',
     'reason',
     'product_id',
+    'supplier_id',
+    'contact_person',
+    'payment_terms',
+    'tax_rate',
+    'quantity_ordered',
+    'quantity_received',
+    'unit_cost',
+    'notes',
+    'start_date',
+    'end_date',
+    'address.line1',
+    'address.line2',
+    'address.city',
+    'address.region',
+    'address.postal_code',
+    'address.country',
   ])
   const remaining = []
 
@@ -82,6 +98,18 @@ export function applyApiFieldErrors(details, setError) {
   }
 
   for (const [field, value] of Object.entries(details)) {
+    if (field === 'address' && value && typeof value === 'object') {
+      for (const [addressField, addressValue] of Object.entries(value)) {
+        const nestedField = `address.${addressField}`
+        const messages = collectMessages(addressValue)
+        if (fieldNames.has(nestedField) && messages.length) {
+          setError(nestedField, { type: 'server', message: messages.join(' ') })
+        } else {
+          remaining.push(...messages)
+        }
+      }
+      continue
+    }
     const messages = collectMessages(value)
     if (fieldNames.has(field) && messages.length) {
       setError(field, { type: 'server', message: messages.join(' ') })

@@ -1,6 +1,7 @@
 """PyMongo data access for purchase orders."""
 
 from collections.abc import Mapping
+from datetime import datetime
 from typing import Any
 
 from bson import ObjectId
@@ -134,6 +135,8 @@ def list_purchase_orders(
     *,
     status: str | None,
     supplier_id: ObjectId | None,
+    start_date: datetime | None,
+    end_date: datetime | None,
     skip: int,
     limit: int,
 ) -> list[dict[str, Any]]:
@@ -143,6 +146,13 @@ def list_purchase_orders(
         query["status"] = status
     if supplier_id is not None:
         query["supplier_id"] = supplier_id
+    if start_date is not None or end_date is not None:
+        created_at: dict[str, datetime] = {}
+        if start_date is not None:
+            created_at["$gte"] = start_date
+        if end_date is not None:
+            created_at["$lte"] = end_date
+        query["created_at"] = created_at
     return list(
         database["purchase_orders"]
         .find(query)
@@ -157,6 +167,8 @@ def count_purchase_orders(
     *,
     status: str | None,
     supplier_id: ObjectId | None,
+    start_date: datetime | None,
+    end_date: datetime | None,
 ) -> int:
     """Count purchase orders matching the validated list filters."""
     query: dict[str, Any] = {}
@@ -164,6 +176,13 @@ def count_purchase_orders(
         query["status"] = status
     if supplier_id is not None:
         query["supplier_id"] = supplier_id
+    if start_date is not None or end_date is not None:
+        created_at: dict[str, datetime] = {}
+        if start_date is not None:
+            created_at["$gte"] = start_date
+        if end_date is not None:
+            created_at["$lte"] = end_date
+        query["created_at"] = created_at
     return database["purchase_orders"].count_documents(query)
 
 

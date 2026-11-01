@@ -16,6 +16,11 @@ const Products = lazy(() => import('./pages/Products.jsx'))
 const ProductDetail = lazy(() => import('./pages/ProductDetail.jsx'))
 const Inventory = lazy(() => import('./pages/Inventory.jsx'))
 const StockMovements = lazy(() => import('./pages/StockMovements.jsx'))
+const Suppliers = lazy(() => import('./pages/Suppliers.jsx'))
+const SupplierDetail = lazy(() => import('./pages/SupplierDetail.jsx'))
+const Purchases = lazy(() => import('./pages/Purchases.jsx'))
+const PurchaseOrderForm = lazy(() => import('./pages/PurchaseOrderForm.jsx'))
+const PurchaseOrderDetail = lazy(() => import('./pages/PurchaseOrderDetail.jsx'))
 const Users = lazy(() => import('./pages/Users.jsx'))
 const Profile = lazy(() => import('./pages/Profile.jsx'))
 const Settings = lazy(() => import('./pages/Settings.jsx'))
@@ -130,6 +135,35 @@ function App() {
                     path="stock-movements"
                   >
                     <Route index element={<StockMovements />} />
+                  </Route>
+                  <Route
+                    element={<RoleRoute permission="suppliers:read" />}
+                    path="suppliers"
+                  >
+                    <Route index element={<Suppliers />} />
+                    <Route path=":supplierId" element={<SupplierDetail />} />
+                  </Route>
+                  <Route
+                    element={<RoleRoute permission="purchase:read" />}
+                    path="purchase-orders"
+                  >
+                    <Route index element={<Purchases />} />
+                    <Route
+                      element={<RoleRoute permission="purchase:create" />}
+                      path="new"
+                    >
+                      <Route index element={<PurchaseOrderForm />} />
+                    </Route>
+                    <Route
+                      element={<RoleRoute permission="purchase:create" />}
+                      path=":purchaseOrderId/edit"
+                    >
+                      <Route index element={<PurchaseOrderForm />} />
+                    </Route>
+                    <Route
+                      path=":purchaseOrderId"
+                      element={<PurchaseOrderDetail />}
+                    />
                   </Route>
                   <Route path="*" element={<NotFound />} />
                 </Route>
