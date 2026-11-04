@@ -14,6 +14,7 @@ EXPECTED_COLLECTIONS = {
     "sales_orders",
     "payments",
     "invoices",
+    "sales_returns",
     "audit_logs",
     "refresh_tokens",
     "login_attempts",
@@ -42,6 +43,8 @@ def test_required_unique_indexes_are_defined():
         ("purchase_orders", ("po_number",)),
         ("sales_orders", ("order_number",)),
         ("invoices", ("invoice_number",)),
+        ("invoices", ("sales_order_id",)),
+        ("sales_returns", ("credit_note_number",)),
         ("purchase_receipts", ("receipt_reference",)),
         ("purchase_receipts", ("purchase_order_id", "idempotency_key")),
         ("idempotency_keys", ("scope", "key")),
@@ -136,6 +139,20 @@ def test_workflow_documents_include_required_inventory_and_order_fields():
     ]
     assert movement_properties["reserved_change"]["bsonType"] == ["int", "long"]
     assert {"return_status", "payment_status", "status_history"} <= sales_fields
+    sales_properties = COLLECTIONS["sales_orders"].validator["$jsonSchema"][
+        "properties"
+    ]
+    assert sales_properties["paid_total"]["bsonType"] == "decimal"
+    assert (
+        sales_item_schema["properties"]["returned_quantity"]["bsonType"]
+        == ["int", "long"]
+    )
+    credit_note_schema = COLLECTIONS["sales_returns"].validator["$jsonSchema"]
+    assert {
+        "credit_note_number",
+        "reason",
+        "created_by",
+    } <= set(credit_note_schema["required"])
 
 
 def test_account_documents_require_security_and_rotation_fields():

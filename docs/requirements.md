@@ -75,11 +75,10 @@ The application is planned as a React (JavaScript) frontend and a Django REST Fr
 - **Confirm reserves stock; it does not deduct stock.** The product update conditionally checks that the product is active and `available = quantity_on_hand - reserved_quantity` is at least the requested quantity. On success, increase `reserved_quantity` by the order quantity; leave `quantity_on_hand` unchanged. The reservation and `reservation` stock movement are committed in the same MongoDB transaction as Draft → Confirmed.
 - **Fulfil deducts stock.** When a confirmed order is fulfilled, decrease both `quantity_on_hand` and `reserved_quantity` by the fulfilled quantity; create stock movements, invoice snapshot, and audit record in one transaction. Thus reserved units are deducted from on-hand only at fulfilment, not at confirmation.
 - Draft cancellation has no stock effect. **Cancelling a Confirmed order releases its reservation:** decrease `reserved_quantity` by the order quantity, leave `quantity_on_hand` unchanged, write a `reservation_release` movement, and transition Confirmed → Cancelled in one transaction.
-- Only Draft → Confirmed and Draft/Confirmed → Cancelled are implemented in Sales part 1. Fulfilment and subsequent sales workflows are planned separately.
-- Fulfilment and other retryable critical writes require idempotency keys and are protected against duplicate processing.
-- Payments cannot exceed the order's outstanding amount. The server computes unpaid/partial/paid status.
-- Returns cannot exceed fulfilled quantities not already returned. Accepted returns restock through the stock service, record movements, update return status, and retain auditable credit-note data.
-- Invoices are available through authorized list/detail endpoints. Printable/PDF invoice generation is optional future work unless separately approved.
+- Confirm accepts Draft and cancellation accepts Draft or Confirmed. Fulfil accepts Confirmed only and requires a UUID `Idempotency-Key`; fulfillment atomically decrements on-hand and reserved stock, transitions the order, issues one `INV-YYYY-000001` invoice, writes stock movements and an audit record. The invoice due date defaults to 30 days after issue.
+- Payments can be recorded only for fulfilled orders. Amounts are exact decimals; the server rejects payments above the outstanding balance and updates `paid_total` and `payment_status` (`unpaid`, `partial`, or `paid`) atomically. Payment references are optional but unique when supplied.
+- Returns can be processed only for fulfilled orders and cannot exceed the fulfilled quantity not already returned. Accepted returns restock through the stock service, write `sale_return` movements, keep the order status Fulfilled, update its `return_status`, and create a reasoned `CN-YYYY-000001` credit-note record and audit event. Credit notes record the calculated credit; no cash refund is issued automatically.
+- Authorized paginated list/detail endpoints provide invoices; a paginated payment list is also available. Printable HTML/PDF invoice generation is not implemented.
 
 ### H. Reports and dashboard
 

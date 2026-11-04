@@ -510,11 +510,13 @@ customer data even after the master record changes.
     tax_percent: Decimal128("10.00"),
     line_subtotal: Decimal128("240.00"),
     line_tax: Decimal128("21.60"),
-    line_total: Decimal128("237.60")
+    line_total: Decimal128("237.60"),
+    returned_quantity: NumberLong(0)
   }],
   status: "confirmed",
   return_status: "none",
   payment_status: "unpaid",
+  paid_total: Decimal128("0.00"),
   subtotal: Decimal128("240.00"),
   discount_total: Decimal128("24.00"),
   tax_total: Decimal128("21.60"),
@@ -537,10 +539,11 @@ customer data even after the master record changes.
 | `order_number` | string | Yes | Unique human-readable order number |
 | `customer_id` | ObjectId | Yes | Existing active customer for new orders |
 | `customer_snapshot` | object | Yes | Historical customer identity/address |
-| `items` | array | Yes | Product ID and SKU/name snapshots, positive quantity, server-derived Decimal128 unit price, discount/tax percentages, and Decimal128 line subtotal/tax/total |
+| `items` | array | Yes | Product ID and SKU/name snapshots, positive quantity, server-derived Decimal128 unit price, discount/tax percentages, Decimal128 line subtotal/tax/total, and returned quantity |
 | `status` | string | Yes | `draft`, `confirmed`, `fulfilled`, or `cancelled` |
 | `return_status` | string | Yes | `none`, `partial`, or `full`; separate from order status |
 | `payment_status` | string | Yes | Server-computed `unpaid`, `partial`, or `paid` |
+| `paid_total` | Decimal128 | Yes for new orders | Server-maintained payment sum used to enforce the outstanding balance |
 | `subtotal`, `discount_total`, `tax_total`, `grand_total` | Decimal128 | Yes | Server-calculated non-negative totals; tax applies after discount |
 | `created_by` | ObjectId | Yes | Creator |
 | `status_history` | array | Yes | Status, actor, UTC time, optional note for each transition |
@@ -565,6 +568,13 @@ use a client-supplied price or total.
 `quantity_on_hand`. Fulfilment deducts by reducing both on-hand and reserved
 quantities. Cancelling a confirmed order reduces only the reservation. Each
 operation and its stock movement are transactionally committed.
+
+**Payments and returns:** Fulfillment initializes any legacy line return
+counters and sets `fulfilled_at`. Payment writes compare-and-set `paid_total`
+inside a transaction, and derive `payment_status` from the exact Decimal128
+balance. Return writes conditionally increment each item's
+`returned_quantity`; the order status remains `fulfilled`, while
+`return_status` becomes `partial` or `full`.
 
 **Relationships / embed vs reference:** References customer and product master
 records, embeds bounded line and customer snapshots for order detail and
@@ -630,10 +640,15 @@ refunds, and reconciliation queries.
   customer_id: ObjectId("650000000000000000000009"),
   customer_snapshot: {code: "CUS-001", name: "Acme Stores", billing_address: {city: "Austin"}},
   items: [{
+    product_id: ObjectId("650000000000000000000004"),
     sku: "CHAIR-001",
     name: "Office Chair",
     quantity: NumberLong(2),
     unit_price: Decimal128("120.00"),
+    discount_percent: Decimal128("10.00"),
+    tax_percent: Decimal128("10.00"),
+    line_subtotal: Decimal128("240.00"),
+    line_tax: Decimal128("21.60"),
     line_total: Decimal128("237.60")
   }],
   subtotal: Decimal128("240.00"),
@@ -665,6 +680,22 @@ embeds immutable invoice lines and customer data so a historical invoice is
 rendered without joining mutable master records.
 
 **Sample query:** `db.invoices.find({customer_id: customerId}).sort({issued_at: -1})`.
+
+### `sales_returns`
+
+**Purpose:** Append-only return records and credit-note snapshots, linked to a
+fulfilled sales order.
+
+Each return stores a unique `CN-YYYY-000001` credit-note number, customer and
+order references/snapshots, returned product lines, exact Decimal128 subtotal,
+discount, tax and total, the required reason, actor, and UTC creation time.
+Per-order item `returned_quantity` counters prevent subsequent returns from
+exceeding fulfilled quantity. The stock movement and return document are
+created in the same transaction. Credit notes record a credit amount; they do
+not automatically issue cash refunds.
+
+**Indexes:** unique credit-note number; `(sales_order_id, created_at DESC)` and
+`(customer_id, created_at DESC)`.
 
 ### `audit_logs`
 

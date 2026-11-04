@@ -187,6 +187,27 @@ def order_item(product, *, quantity=1, discount="0.00", tax="0.00", **extra):
     }
 
 
+def confirm_order(client, user, order_id):
+    """Confirm an order through the API."""
+    return client.post(
+        f"/api/sales-orders/{order_id}/confirm/",
+        {},
+        format="json",
+        **auth_headers(user),
+    )
+
+
+def fulfill_order(client, user, order_id, *, key=None):
+    """Fulfil an order with the required idempotency key."""
+    return client.post(
+        f"/api/sales-orders/{order_id}/fulfill/",
+        {},
+        format="json",
+        HTTP_IDEMPOTENCY_KEY=key or str(uuid4()),
+        **auth_headers(user),
+    )
+
+
 def test_create_calculates_each_line_and_ignores_client_prices_and_totals(
     client,
     sales_api,
@@ -723,3 +744,201 @@ def test_confirmation_and_cancel_permissions_are_enforced(client, sales_api):
     assert sales_api["sales_orders"].find_one({"_id": ObjectId(order_id)})[
         "status"
     ] == "draft"
+
+
+def test_fulfillment_requires_confirmation_key_and_is_idempotent(client, sales_api):
+    user = insert_user(sales_api)
+    customer = insert_customer(sales_api)
+    product = insert_product(sales_api, price="12.50", quantity=4)
+    created = create_order(
+        client,
+        user,
+        customer,
+        [order_item(product, quantity=2)],
+    )
+    order_id = created.json()["data"]["sales_order"]["id"]
+
+    missing_key = client.post(
+        f"/api/sales-orders/{order_id}/fulfill/",
+        {},
+        format="json",
+        **auth_headers(user),
+    )
+    unconfirmed = fulfill_order(client, user, order_id)
+    assert missing_key.status_code == 400
+    assert unconfirmed.status_code == 409
+
+    assert confirm_order(client, user, order_id).status_code == 200
+    key = str(uuid4())
+    fulfilled = fulfill_order(client, user, order_id, key=key)
+    replay = fulfill_order(client, user, order_id, key=key)
+    new_key_retry = fulfill_order(client, user, order_id)
+
+    stored_product = sales_api["products"].find_one({"_id": product["_id"]})
+    order = sales_api["sales_orders"].find_one({"_id": ObjectId(order_id)})
+    invoice = sales_api["invoices"].find_one({"sales_order_id": ObjectId(order_id)})
+    movements = sales_api["stock_movements"].find(
+        {"reference_id": ObjectId(order_id)}
+    )
+    assert fulfilled.status_code == 200
+    assert fulfilled.json()["data"]["sales_order"]["status"] == "fulfilled"
+    assert fulfilled.json()["data"]["invoice"]["invoice_number"].startswith("INV-")
+    assert replay.status_code == 200
+    assert replay.json() == fulfilled.json()
+    assert new_key_retry.status_code == 409
+    assert stored_product["quantity_on_hand"] == 2
+    assert stored_product["reserved_quantity"] == 0
+    assert order["fulfilled_at"] is not None
+    assert invoice["due_date"] > invoice["issued_at"]
+    assert len(list(movements)) == 2
+    assert sales_api["audit_logs"].count_documents(
+        {"action": "sales_order.fulfilled"}
+    ) == 1
+
+
+def test_payment_partial_full_and_overpayment(client, sales_api):
+    user = insert_user(sales_api)
+    customer = insert_customer(sales_api)
+    product = insert_product(sales_api, price="25.00")
+    created = create_order(
+        client,
+        user,
+        customer,
+        [order_item(product, quantity=2)],
+    )
+    order_id = created.json()["data"]["sales_order"]["id"]
+    assert confirm_order(client, user, order_id).status_code == 200
+    assert fulfill_order(client, user, order_id).status_code == 200
+
+    def pay(amount, reference=None):
+        body = {"amount": amount, "method": "bank_transfer"}
+        if reference is not None:
+            body["reference"] = reference
+        return client.post(
+            f"/api/sales-orders/{order_id}/payments/",
+            body,
+            format="json",
+            **auth_headers(user),
+        )
+
+    partial = pay("20.00", "PAY-001")
+    overpay = pay("30.01", "PAY-002")
+    final = pay("30.00", "PAY-003")
+    listing = client.get("/api/payments/?page=1&page_size=10", **auth_headers(user))
+
+    stored = sales_api["sales_orders"].find_one({"_id": ObjectId(order_id)})
+    assert partial.status_code == 201
+    assert partial.json()["data"]["sales_order"]["payment_status"] == "partial"
+    assert overpay.status_code == 409
+    assert final.status_code == 201
+    assert final.json()["data"]["sales_order"]["payment_status"] == "paid"
+    assert listing.status_code == 200
+    assert listing.json()["meta"]["total"] == 2
+    assert stored["paid_total"] == Decimal128("50.00")
+    assert sales_api["payments"].count_documents({}) == 2
+
+
+def test_return_restock_credit_note_and_return_limit(client, sales_api):
+    user = insert_user(sales_api)
+    customer = insert_customer(sales_api)
+    product = insert_product(sales_api, price="20.00", quantity=5)
+    created = create_order(
+        client,
+        user,
+        customer,
+        [order_item(product, quantity=2, discount="10.00", tax="5.00")],
+    )
+    order_id = created.json()["data"]["sales_order"]["id"]
+    assert confirm_order(client, user, order_id).status_code == 200
+    assert fulfill_order(client, user, order_id).status_code == 200
+
+    def return_item(quantity):
+        return client.post(
+            f"/api/sales-orders/{order_id}/returns/",
+            {
+                "items": [{"product_id": str(product["_id"]), "quantity": quantity}],
+                "reason": "Damaged packaging",
+            },
+            format="json",
+            **auth_headers(user),
+        )
+
+    partial = return_item(1)
+    full = return_item(1)
+    excessive = return_item(1)
+
+    stored_product = sales_api["products"].find_one({"_id": product["_id"]})
+    order = sales_api["sales_orders"].find_one({"_id": ObjectId(order_id)})
+    credit_note = sales_api["sales_returns"].find_one(
+        {"sales_order_id": ObjectId(order_id)}
+    )
+    return_movements = list(
+        sales_api["stock_movements"].find(
+            {
+                "reference_id": ObjectId(order_id),
+                "movement_type": "sale_return",
+            }
+        )
+    )
+    assert partial.status_code == 201
+    assert partial.json()["data"]["sales_order"]["status"] == "fulfilled"
+    assert partial.json()["data"]["sales_order"]["return_status"] == "partial"
+    assert full.status_code == 201
+    assert full.json()["data"]["sales_order"]["return_status"] == "full"
+    assert full.json()["data"]["sales_return"]["credit_note_number"].startswith("CN-")
+    assert excessive.status_code == 409
+    assert stored_product["quantity_on_hand"] == 5
+    assert stored_product["reserved_quantity"] == 0
+    assert order["items"][0]["returned_quantity"] == 2
+    assert len(return_movements) == 2
+    assert credit_note["total"] == Decimal128("18.90")
+    assert sales_api["audit_logs"].count_documents(
+        {"action": "sales_order.returned"}
+    ) == 2
+
+
+def test_invoice_list_detail_and_full_sales_lifecycle(client, sales_api):
+    user = insert_user(sales_api)
+    customer = insert_customer(sales_api)
+    product = insert_product(sales_api, price="20.00", quantity=4)
+    created = create_order(
+        client,
+        user,
+        customer,
+        [order_item(product, quantity=2, discount="10.00", tax="5.00")],
+    )
+    order_id = created.json()["data"]["sales_order"]["id"]
+
+    assert confirm_order(client, user, order_id).status_code == 200
+    fulfilled = fulfill_order(client, user, order_id)
+    invoice_id = fulfilled.json()["data"]["invoice"]["id"]
+    invoice_list = client.get("/api/invoices/?page=1&page_size=10", **auth_headers(user))
+    invoice_detail = client.get(
+        f"/api/invoices/{invoice_id}/",
+        **auth_headers(user),
+    )
+    payment = client.post(
+        f"/api/sales-orders/{order_id}/payments/",
+        {"amount": "37.80", "method": "cash"},
+        format="json",
+        **auth_headers(user),
+    )
+    returned = client.post(
+        f"/api/sales-orders/{order_id}/returns/",
+        {
+            "items": [{"product_id": str(product["_id"]), "quantity": 1}],
+            "reason": "Customer changed their mind",
+        },
+        format="json",
+        **auth_headers(user),
+    )
+
+    assert fulfilled.status_code == 200
+    assert invoice_list.status_code == 200
+    assert invoice_list.json()["meta"]["total"] == 1
+    assert invoice_detail.status_code == 200
+    assert invoice_detail.json()["data"]["invoice"]["id"] == invoice_id
+    assert payment.status_code == 201
+    assert payment.json()["data"]["sales_order"]["payment_status"] == "paid"
+    assert returned.status_code == 201
+    assert returned.json()["data"]["sales_order"]["return_status"] == "partial"

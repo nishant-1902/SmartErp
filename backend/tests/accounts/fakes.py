@@ -24,6 +24,8 @@ class FakeCollection:
             stored = deepcopy(document)
             for fields in self.unique_fields:
                 values = tuple(stored.get(field) for field in fields)
+                if any(value is None for value in values):
+                    continue
                 if any(
                     tuple(existing.get(field) for field in fields) == values
                     for existing in self.documents.values()
@@ -198,7 +200,10 @@ class FakeCollection:
                         return False
                     continue
                 for operator, value in expected.items():
-                    if operator == "$regex":
+                    if operator == "$exists":
+                        if (actual is not None) != value:
+                            return False
+                    elif operator == "$regex":
                         flags = re.IGNORECASE if expected.get("$options") == "i" else 0
                         if actual is None or re.search(value, actual, flags) is None:
                             return False
@@ -276,6 +281,9 @@ class FakeDatabase:
                 "idempotency_keys": (("scope", "key"),),
                 "purchase_orders": (("po_number",),),
                 "sales_orders": (("order_number",),),
+                "invoices": (("invoice_number",), ("sales_order_id",)),
+                "payments": (("payment_reference",),),
+                "sales_returns": (("credit_note_number",),),
                 "purchase_receipts": (
                     ("receipt_reference",),
                     ("purchase_order_id", "idempotency_key"),

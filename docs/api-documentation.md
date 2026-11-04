@@ -156,9 +156,77 @@ Managers and Super Admins; reads are role-limited by `sales:read`.
   Confirmed. Repeated or otherwise invalid transitions return `409` without
   changing stock or history.
 - **Status codes:** `200`, `400`, `401`, `403`, `404`, `409`.
-- **Not in part 1:** Fulfilment (the later transition that deducts on-hand
-  stock while releasing reservation), payments, invoices, returns, and their
-  endpoints.
+- Fulfilment, payments, invoices, and returns are documented under [Sales orders — part 2](#sales-orders--part-2).
+
+## Sales orders — part 2
+
+Fulfilment requires `sales:fulfil` (Sales Manager, Inventory Manager, or Super
+Admin according to the permission matrix). Payment recording requires
+`payments:record`; payment and invoice reads require `payments:read` and
+`invoices:read`; return processing requires `returns:process`.
+
+### Fulfil and issue an invoice
+
+- **Method and URL:** `POST /api/sales-orders/{id}/fulfill/`.
+- **Headers:** `Idempotency-Key` is required and must be a UUID. Send an empty
+  JSON object as the body.
+- **Behavior:** Confirmed only. In one snapshot/majority transaction, each
+  product's on-hand and reserved quantities are conditionally reduced by the
+  order quantity and a `sale_fulfilment` movement is recorded. The order
+  conditionally transitions to Fulfilled, its `fulfilled_at` timestamp and
+  status history are updated, and one invoice snapshot plus an audit event are
+  created. Invoice numbers use `INV-YYYY-000001`; due date defaults to 30 days
+  after issue.
+- **Idempotency:** Repeating the same request with the same key replays the
+  original response. A distinct key cannot fulfil the order twice.
+- **Success response (`200`):** `data.sales_order` and `data.invoice`.
+- **Status codes:** `200`, `400`, `401`, `403`, `404`, `409`, `422`.
+
+### Record and list payments
+
+- **Record method and URL:** `POST /api/sales-orders/{id}/payments/`.
+- **Request body:** `amount` as an exact decimal string, `method` (`cash`,
+  `bank_transfer`, `card`, or `other`), and optional `reference`.
+- **Behavior:** Only fulfilled orders accept payments. Overpayment is rejected
+  with `409`; payment inserts, paid-total compare-and-set, server-derived
+  `payment_status` (`partial` or `paid`), and an audit event share a MongoDB
+  transaction. New orders start `unpaid`.
+- **List method and URL:** `GET /api/payments/`; requires `payments:read`.
+- **Filters:** `page`, `page_size` (maximum `100`), `customer_id`,
+  `sales_order_id`, `method`, and `status`.
+- **Success response:** Record returns `201` with `data.payment` and
+  `data.sales_order`; list returns `200` with `data.payments` and pagination
+  metadata.
+- **Status codes:** `201`, `200`, `400`, `401`, `403`, `404`, `409`.
+
+### List and read invoices
+
+- **Methods and URLs:** `GET /api/invoices/` and `GET /api/invoices/{id}/`;
+  both require `invoices:read`.
+- **List filters:** `page`, `page_size` (maximum `100`), `customer_id`, and
+  `sales_order_id`.
+- **Behavior:** Invoices are immutable customer/item/totals snapshots, emitted
+  once during fulfillment. Invoice listing and detail return historical data
+  without reading mutable customer or product records.
+- **Success response:** List returns `200` with `data.invoices` and pagination
+  metadata; detail returns `200` with `data.invoice`.
+- **Status codes:** `200`, `400`, `401`, `403`, `404`.
+- **Not implemented:** Printable HTML or PDF invoice generation.
+
+### Process returns
+
+- **Method and URL:** `POST /api/sales-orders/{id}/returns/`; requires
+  `returns:process`.
+- **Request body:** A non-empty `items` array of unique `product_id` and
+  positive integer `quantity` lines, plus a 3–500 character `reason`.
+- **Behavior:** Fulfilled orders only. Each line is conditionally limited to
+  fulfilled quantity minus prior returns. A transaction increments returned
+  quantities, restocks through `apply_stock_change` as `sale_return`, writes
+  the stock movement, creates an auditable credit note (`CN-YYYY-000001`), and
+  updates `return_status` to `partial` or `full`. The sales order remains
+  Fulfilled. The credit note records the returned amount; no refund is issued.
+- **Success response (`201`):** `data.sales_return` and `data.sales_order`.
+- **Status codes:** `201`, `400`, `401`, `403`, `404`, `409`.
 
 ## Suppliers
 

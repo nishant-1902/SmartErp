@@ -18,5 +18,20 @@ urlpatterns = [
         views.sales_order_cancel_view,
         name="cancel",
     ),
+    path(
+        "<str:sales_order_id>/fulfill/",
+        views.sales_order_fulfill_view,
+        name="fulfill",
+    ),
+    path(
+        "<str:sales_order_id>/payments/",
+        views.sales_order_payment_view,
+        name="payment",
+    ),
+    path(
+        "<str:sales_order_id>/returns/",
+        views.sales_order_return_view,
+        name="return",
+    ),
     path("<str:sales_order_id>/", views.sales_order_detail_view, name="detail"),
 ]

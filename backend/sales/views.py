@@ -14,14 +14,24 @@ from common.permissions import IsAuthenticatedMongo, has_permission
 from common.responses import error_response, success_response
 from sales.serializers import (
     EmptyActionSerializer,
+    InvoiceListQuerySerializer,
+    PaymentCreateSerializer,
+    PaymentListQuerySerializer,
+    SalesReturnCreateSerializer,
     SalesOrderCreateSerializer,
     SalesOrderListQuerySerializer,
     SalesOrderPatchSerializer,
 )
 from sales.services import (
     create_sales_order,
+    fulfil_sales_order,
+    get_invoice,
     get_sales_order,
+    list_invoices,
+    list_payments,
     list_sales_orders,
+    process_sales_return,
+    record_payment,
     transition_sales_order,
     update_sales_order,
 )
@@ -142,3 +152,105 @@ def sales_order_confirm_view(request, sales_order_id: str):
 def sales_order_cancel_view(request, sales_order_id: str):
     """Cancel a Draft or Confirmed order, releasing any reservation."""
     return _transition_response(request, sales_order_id, action="cancel")
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticatedMongo])
+def sales_order_fulfill_view(request, sales_order_id: str):
+    """Fulfil a Confirmed order and issue its invoice exactly once."""
+    parsed_id = parse_object_id(sales_order_id)
+    if not has_permission(request.user, "sales:fulfil"):
+        return _permission_denied("sales:fulfil")
+    _validated_request(EmptyActionSerializer, request.data)
+    with mongo_database() as database:
+        result = fulfil_sales_order(
+            database,
+            parsed_id,
+            actor_id=request.user.id,
+            idempotency_key=request.headers.get("Idempotency-Key"),
+        )
+    return success_response(result)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticatedMongo])
+def sales_order_payment_view(request, sales_order_id: str):
+    """Record a payment against one fulfilled order."""
+    parsed_id = parse_object_id(sales_order_id)
+    if not has_permission(request.user, "payments:record"):
+        return _permission_denied("payments:record")
+    values = _validated_request(PaymentCreateSerializer, request.data)
+    with mongo_database() as database:
+        result = record_payment(
+            database,
+            parsed_id,
+            values=values,
+            actor_id=request.user.id,
+        )
+    return success_response(result, status=201)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticatedMongo])
+def sales_order_return_view(request, sales_order_id: str):
+    """Restock a fulfilled order and create its credit note."""
+    parsed_id = parse_object_id(sales_order_id)
+    if not has_permission(request.user, "returns:process"):
+        return _permission_denied("returns:process")
+    values = _validated_request(SalesReturnCreateSerializer, request.data)
+    with mongo_database() as database:
+        result = process_sales_return(
+            database,
+            parsed_id,
+            values=values,
+            actor_id=request.user.id,
+        )
+    return success_response(result, status=201)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticatedMongo])
+def payments_list_view(request):
+    """List payments using validated filters and pagination."""
+    if not has_permission(request.user, "payments:read"):
+        return _permission_denied("payments:read")
+    filters = _validated_request(PaymentListQuerySerializer, request.query_params)
+    with mongo_database() as database:
+        payments, meta = list_payments(
+            database,
+            customer_id=filters.get("customer_id"),
+            sales_order_id=filters.get("sales_order_id"),
+            method=filters.get("method"),
+            status=filters.get("status"),
+            pagination=_pagination(filters),
+        )
+    return success_response({"payments": payments}, meta=meta)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticatedMongo])
+def invoices_list_view(request):
+    """List invoices using validated filters and pagination."""
+    if not has_permission(request.user, "invoices:read"):
+        return _permission_denied("invoices:read")
+    filters = _validated_request(InvoiceListQuerySerializer, request.query_params)
+    with mongo_database() as database:
+        invoices, meta = list_invoices(
+            database,
+            customer_id=filters.get("customer_id"),
+            sales_order_id=filters.get("sales_order_id"),
+            pagination=_pagination(filters),
+        )
+    return success_response({"invoices": invoices}, meta=meta)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticatedMongo])
+def invoice_detail_view(request, invoice_id: str):
+    """Read one invoice snapshot."""
+    parsed_id = parse_object_id(invoice_id)
+    if not has_permission(request.user, "invoices:read"):
+        return _permission_denied("invoices:read")
+    with mongo_database() as database:
+        invoice = get_invoice(database, parsed_id)
+    return success_response({"invoice": invoice})

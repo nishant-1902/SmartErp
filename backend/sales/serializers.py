@@ -164,3 +164,113 @@ class SalesOrderListQuerySerializer(StrictSerializer):
 
 class EmptyActionSerializer(StrictSerializer):
     """Reject unexpected request-body fields for argument-free actions."""
+
+
+class PaymentCreateSerializer(StrictSerializer):
+    """Validate an exact payment amount, method, and optional reference."""
+
+    amount = ExactDecimalField(
+        max_digits=18,
+        decimal_places=2,
+        min_value=Decimal("0.01"),
+        coerce_to_string=False,
+    )
+    method = serializers.ChoiceField(
+        choices=("cash", "bank_transfer", "card", "other")
+    )
+    reference = serializers.CharField(
+        required=False,
+        allow_null=True,
+        allow_blank=True,
+        max_length=200,
+        trim_whitespace=True,
+        default=None,
+    )
+
+    def validate_reference(self, value):
+        return value.strip() or None if value is not None else None
+
+
+class SalesReturnItemSerializer(StrictSerializer):
+    """Validate one product and positive return quantity."""
+
+    product_id = serializers.CharField(trim_whitespace=True)
+    quantity = serializers.IntegerField(min_value=1)
+
+    def to_internal_value(self, data):
+        if isinstance(data, Mapping) and isinstance(data.get("quantity"), bool):
+            raise serializers.ValidationError(
+                {"quantity": "Must be a positive integer."}
+            )
+        return super().to_internal_value(data)
+
+    def validate_product_id(self, value):
+        return parse_object_id(value)
+
+
+class SalesReturnCreateSerializer(StrictSerializer):
+    """Validate a return request and its required reason."""
+
+    items = SalesReturnItemSerializer(many=True, allow_empty=False)
+    reason = serializers.CharField(min_length=3, max_length=500, trim_whitespace=True)
+
+    def validate_reason(self, value):
+        if not value:
+            raise serializers.ValidationError("A return reason is required.")
+        return value
+
+    def validate_items(self, items):
+        product_ids = [item["product_id"] for item in items]
+        if len(product_ids) != len(set(product_ids)):
+            raise serializers.ValidationError(
+                "A product may appear only once in a return."
+            )
+        return items
+
+
+class PaymentListQuerySerializer(StrictSerializer):
+    """Validate payment history filters and pagination."""
+
+    page = serializers.IntegerField(min_value=1, required=False, default=1)
+    page_size = serializers.IntegerField(
+        min_value=1,
+        max_value=100,
+        required=False,
+        default=20,
+    )
+    customer_id = serializers.CharField(required=False, trim_whitespace=True)
+    sales_order_id = serializers.CharField(required=False, trim_whitespace=True)
+    method = serializers.ChoiceField(
+        choices=("cash", "bank_transfer", "card", "other"),
+        required=False,
+    )
+    status = serializers.ChoiceField(
+        choices=("pending", "completed", "refunded", "failed"),
+        required=False,
+    )
+
+    def validate_customer_id(self, value):
+        return parse_object_id(value)
+
+    def validate_sales_order_id(self, value):
+        return parse_object_id(value)
+
+
+class InvoiceListQuerySerializer(StrictSerializer):
+    """Validate invoice history filters and pagination."""
+
+    page = serializers.IntegerField(min_value=1, required=False, default=1)
+    page_size = serializers.IntegerField(
+        min_value=1,
+        max_value=100,
+        required=False,
+        default=20,
+    )
+    customer_id = serializers.CharField(required=False, trim_whitespace=True)
+    sales_order_id = serializers.CharField(required=False, trim_whitespace=True)
+
+    def validate_customer_id(self, value):
+        return parse_object_id(value)
+
+    def validate_sales_order_id(self, value):
+        return parse_object_id(value)

@@ -1,6 +1,7 @@
 """Sales-order business rules, totals, and stock-state transitions."""
 
 from collections.abc import Mapping
+from datetime import timedelta
 from decimal import Decimal
 from typing import Any, Callable, TypeVar
 
@@ -12,11 +13,13 @@ from pymongo.read_concern import ReadConcern
 from pymongo.write_concern import WriteConcern
 
 from common.exceptions import (
+    ConflictError,
     InsufficientStock,
     InvalidStateTransition,
     NotFoundError,
     ValidationFailed,
 )
+from common.idempotency import execute_idempotent
 from common.money import (
     apply_discount,
     apply_tax,
@@ -27,16 +30,34 @@ from common.money import (
 from common.object_id import parse_object_id
 from common.pagination import Pagination
 from common.serialization import serialize_document
+from common.time import utc_now
+from accounts.repository import write_audit_log
 from customers.repository import find_customer_by_id
 from inventory.repository import find_active_product
 from inventory.services import apply_stock_change
 from sales.repository import (
+    allocate_document_number,
+    count_invoices,
+    count_payments,
     count_sales_orders,
+    find_invoice_by_id,
     find_sales_order_by_id,
+    increment_returned_quantity,
+    insert_invoice,
+    insert_payment,
+    insert_sales_return,
     insert_sales_order,
+    initialize_returned_quantities,
+    list_invoices as list_invoice_records,
+    list_payments as list_payment_records,
     list_sales_orders as list_sales_order_records,
+    public_invoice,
+    public_payment,
+    public_sales_return,
     public_sales_order,
     transition_sales_order as transition_sales_order_record,
+    update_paid_total,
+    update_return_status,
     update_draft_sales_order,
 )
 
@@ -111,6 +132,7 @@ def _build_items(
                 "sku": product["sku"],
                 "name": product["name"],
                 "quantity": quantity,
+                "returned_quantity": 0,
                 "unit_price": unit_price,
                 "discount_percent": discount_percent,
                 "tax_percent": tax_percent,
@@ -413,3 +435,439 @@ def transition_sales_order(
         )
 
     return _public_sales_order(_run_transaction(database, operation))
+
+
+def _fulfil_order_items(
+    session: ClientSession,
+    order: Mapping[str, Any],
+    actor_id: ObjectId,
+) -> None:
+    """Deduct each reserved line and record its stock movement."""
+    for item in order["items"]:
+        quantity = item["quantity"]
+        apply_stock_change(
+            session,
+            item["product_id"],
+            -quantity,
+            -quantity,
+            "sale_fulfilment",
+            f"Fulfil sales order {order['order_number']}",
+            "sales_order",
+            order["_id"],
+            actor_id,
+        )
+
+
+def fulfil_sales_order(
+    database: Database[Any],
+    sales_order_id: ObjectId | str,
+    *,
+    actor_id: ObjectId | str,
+    idempotency_key: str | None,
+) -> dict[str, Any]:
+    """Fulfil a Confirmed order idempotently and create its invoice atomically."""
+    parsed_id = parse_object_id(sales_order_id)
+    actor = parse_object_id(actor_id)
+
+    def operation(session: ClientSession, _operation_id: ObjectId) -> dict[str, Any]:
+        order = find_sales_order_by_id(database, parsed_id, session=session)
+        if order is None:
+            raise NotFoundError("Sales order was not found.")
+        if order["status"] != "confirmed":
+            raise InvalidStateTransition(
+                "Only Confirmed sales orders may be fulfilled."
+            )
+
+        if not initialize_returned_quantities(database, session, order):
+            raise InvalidStateTransition()
+        order = find_sales_order_by_id(database, parsed_id, session=session)
+        if order is None:
+            raise NotFoundError("Sales order was not found.")
+        _fulfil_order_items(session, order, actor)
+        fulfilled_at = utc_now()
+        transitioned = transition_sales_order_record(
+            database,
+            session,
+            parsed_id,
+            expected_status="confirmed",
+            next_status="fulfilled",
+            actor_id=actor,
+            fulfilled_at=fulfilled_at,
+        )
+        if transitioned.modified_count != 1:
+            raise InvalidStateTransition()
+
+        invoice_number = allocate_document_number(
+            database,
+            session,
+            counter_name="invoice",
+            prefix="INV",
+            year=fulfilled_at.year,
+        )
+        invoice = insert_invoice(
+            database,
+            session,
+            invoice_id=ObjectId(),
+            invoice_number=invoice_number,
+            order=order,
+            issued_at=fulfilled_at,
+            due_date=fulfilled_at + timedelta(days=30),
+        )
+        updated_order = find_sales_order_by_id(database, parsed_id, session=session)
+        if updated_order is None:
+            raise NotFoundError("Sales order was not found.")
+        write_audit_log(
+            database,
+            actor_id=actor,
+            action="sales_order.fulfilled",
+            resource="sales_order",
+            resource_id=parsed_id,
+            outcome="success",
+            now=fulfilled_at,
+            session=session,
+        )
+        return {
+            "sales_order": _public_sales_order(updated_order),
+            "invoice": serialize_document(public_invoice(invoice)),
+        }
+
+    return execute_idempotent(
+        database,
+        user_id=actor,
+        endpoint=f"sales-orders:{parsed_id}:fulfil",
+        key=idempotency_key or "",
+        request_body={},
+        operation=operation,
+    )
+
+
+def record_payment(
+    database: Database[Any],
+    sales_order_id: ObjectId | str,
+    *,
+    values: dict[str, Any],
+    actor_id: ObjectId | str,
+) -> dict[str, Any]:
+    """Record a completed payment without allowing the order to be overpaid."""
+    parsed_id = parse_object_id(sales_order_id)
+    actor = parse_object_id(actor_id)
+    amount = to_decimal(values["amount"])
+
+    def operation(session: ClientSession) -> dict[str, Any]:
+        order = find_sales_order_by_id(database, parsed_id, session=session)
+        if order is None:
+            raise NotFoundError("Sales order was not found.")
+        if order["status"] != "fulfilled":
+            raise InvalidStateTransition(
+                "Payments may be recorded only for fulfilled sales orders."
+            )
+        current_paid = (
+            to_decimal(order["paid_total"])
+            if order.get("paid_total") is not None
+            else None
+        )
+        paid_before = current_paid or Decimal("0.00")
+        next_paid = quantize_money(paid_before + amount)
+        grand_total = to_decimal(order["grand_total"])
+        if next_paid > grand_total:
+            raise ConflictError(
+                "Payment exceeds the sales order's outstanding balance.",
+                details={
+                    "outstanding_amount": str(quantize_money(grand_total - paid_before))
+                },
+            )
+
+        now = utc_now()
+        payment = insert_payment(
+            database,
+            session,
+            payment_id=ObjectId(),
+            order=order,
+            amount=amount,
+            method=values["method"],
+            reference=values.get("reference"),
+            actor_id=actor,
+            now=now,
+        )
+        status = "paid" if next_paid == grand_total else "partial"
+        updated = update_paid_total(
+            database,
+            session,
+            order_id=parsed_id,
+            expected_paid_total=current_paid,
+            paid_total=next_paid,
+            payment_status=status,
+            now=now,
+        )
+        if updated.modified_count != 1:
+            raise ConflictError(
+                "The payment balance changed. Please retry the request."
+            )
+        write_audit_log(
+            database,
+            actor_id=actor,
+            action="payment.recorded",
+            resource="payment",
+            resource_id=payment["_id"],
+            outcome="success",
+            now=now,
+            session=session,
+        )
+        updated_order = find_sales_order_by_id(database, parsed_id, session=session)
+        if updated_order is None:
+            raise NotFoundError("Sales order was not found.")
+        return {
+            "payment": serialize_document(public_payment(payment)),
+            "sales_order": _public_sales_order(updated_order),
+        }
+
+    return _run_transaction(database, operation)
+
+
+def list_payments(
+    database: Database[Any],
+    *,
+    customer_id: ObjectId | None,
+    sales_order_id: ObjectId | None,
+    method: str | None,
+    status: str | None,
+    pagination: Pagination,
+) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    """Return one authorized, paginated payment page."""
+    values = list_payment_records(
+        database,
+        customer_id=customer_id,
+        sales_order_id=sales_order_id,
+        method=method,
+        status=status,
+        skip=pagination.skip,
+        limit=pagination.limit,
+    )
+    total = count_payments(
+        database,
+        customer_id=customer_id,
+        sales_order_id=sales_order_id,
+        method=method,
+        status=status,
+    )
+    return (
+        [serialize_document(public_payment(value)) for value in values],
+        pagination.build_meta(total),
+    )
+
+
+def list_invoices(
+    database: Database[Any],
+    *,
+    customer_id: ObjectId | None,
+    sales_order_id: ObjectId | None,
+    pagination: Pagination,
+) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    """Return one authorized, paginated invoice page."""
+    values = list_invoice_records(
+        database,
+        customer_id=customer_id,
+        sales_order_id=sales_order_id,
+        skip=pagination.skip,
+        limit=pagination.limit,
+    )
+    total = count_invoices(
+        database,
+        customer_id=customer_id,
+        sales_order_id=sales_order_id,
+    )
+    return (
+        [serialize_document(public_invoice(value)) for value in values],
+        pagination.build_meta(total),
+    )
+
+
+def get_invoice(
+    database: Database[Any],
+    invoice_id: ObjectId | str,
+) -> dict[str, Any]:
+    """Return one invoice or raise a safe not-found error."""
+    invoice = find_invoice_by_id(database, invoice_id)
+    if invoice is None:
+        raise NotFoundError("Invoice was not found.")
+    return serialize_document(public_invoice(invoice))
+
+
+def _return_line(
+    order_item: Mapping[str, Any],
+    quantity: int,
+) -> dict[str, Any]:
+    """Recalculate the prorated line amounts for a returned quantity."""
+    unit_price = to_decimal(order_item["unit_price"])
+    discount_percent = to_decimal(order_item.get("discount_percent", "0"))
+    tax_percent = to_decimal(order_item.get("tax_percent", "0"))
+    subtotal = line_total(unit_price, quantity)
+    discounted = apply_discount(subtotal, discount_percent)
+    discount = quantize_money(subtotal - discounted)
+    taxed = apply_tax(discounted, tax_percent)
+    tax = quantize_money(taxed - discounted)
+    return {
+        "product_id": order_item["product_id"],
+        "sku": order_item["sku"],
+        "name": order_item["name"],
+        "quantity": quantity,
+        "unit_price": unit_price,
+        "discount_percent": discount_percent,
+        "tax_percent": tax_percent,
+        "line_subtotal": subtotal,
+        "line_discount": discount,
+        "line_tax": tax,
+        "line_total": quantize_money(discounted + tax),
+    }
+
+
+def process_sales_return(
+    database: Database[Any],
+    sales_order_id: ObjectId | str,
+    *,
+    values: dict[str, Any],
+    actor_id: ObjectId | str,
+) -> dict[str, Any]:
+    """Restock a fulfilled order, recording an auditable credit note."""
+    parsed_id = parse_object_id(sales_order_id)
+    actor = parse_object_id(actor_id)
+
+    def operation(session: ClientSession) -> dict[str, Any]:
+        order = find_sales_order_by_id(database, parsed_id, session=session)
+        if order is None:
+            raise NotFoundError("Sales order was not found.")
+        if order["status"] != "fulfilled":
+            raise InvalidStateTransition(
+                "Only Fulfilled sales orders may be returned."
+            )
+
+        if not initialize_returned_quantities(database, session, order):
+            raise InvalidStateTransition()
+        order = find_sales_order_by_id(database, parsed_id, session=session)
+        if order is None:
+            raise NotFoundError("Sales order was not found.")
+        order_items = {
+            item["product_id"]: item
+            for item in order["items"]
+        }
+        returned_lines: list[dict[str, Any]] = []
+        subtotal = Decimal("0.00")
+        discount_total = Decimal("0.00")
+        tax_total = Decimal("0.00")
+        total = Decimal("0.00")
+        now = utc_now()
+        for requested in values["items"]:
+            product_id = requested["product_id"]
+            order_item = order_items.get(product_id)
+            if order_item is None:
+                raise ValidationFailed(
+                    "A return item must belong to the sales order.",
+                    details={"product_id": str(product_id)},
+                )
+            returned = order_item.get("returned_quantity", 0)
+            if requested["quantity"] > order_item["quantity"] - returned:
+                raise ConflictError(
+                    "Return quantity exceeds the fulfilled quantity not yet returned.",
+                    details={
+                        "product_id": str(product_id),
+                        "returnable_quantity": order_item["quantity"] - returned,
+                    },
+                )
+
+            changed = increment_returned_quantity(
+                database,
+                session,
+                order_id=parsed_id,
+                product_id=product_id,
+                quantity=requested["quantity"],
+                max_returned_quantity=(
+                    order_item["quantity"] - requested["quantity"]
+                ),
+            )
+            if changed.modified_count != 1:
+                raise ConflictError(
+                    "Returnable quantity changed. Please retry the request.",
+                    details={"product_id": str(product_id)},
+                )
+            line = _return_line(order_item, requested["quantity"])
+            returned_lines.append(line)
+            subtotal += line["line_subtotal"]
+            discount_total += line["line_discount"]
+            tax_total += line["line_tax"]
+            total += line["line_total"]
+            apply_stock_change(
+                session,
+                product_id,
+                requested["quantity"],
+                0,
+                "sale_return",
+                f"Return for sales order {order['order_number']}: "
+                f"{values['reason']}"[:500],
+                "sales_order",
+                parsed_id,
+                actor,
+            )
+
+        updated_order = find_sales_order_by_id(database, parsed_id, session=session)
+        if updated_order is None:
+            raise NotFoundError("Sales order was not found.")
+        return_status = (
+            "full"
+            if all(
+                item.get("returned_quantity", 0) >= item["quantity"]
+                for item in updated_order["items"]
+            )
+            else "partial"
+        )
+        status_update = update_return_status(
+            database,
+            session,
+            order_id=parsed_id,
+            expected_status="fulfilled",
+            return_status=return_status,
+            now=now,
+        )
+        if status_update.modified_count != 1:
+            raise InvalidStateTransition()
+
+        credit_note_number = allocate_document_number(
+            database,
+            session,
+            counter_name="credit_note",
+            prefix="CN",
+            year=now.year,
+        )
+        sales_return = insert_sales_return(
+            database,
+            session,
+            return_id=ObjectId(),
+            credit_note_number=credit_note_number,
+            order=order,
+            items=returned_lines,
+            reason=values["reason"],
+            subtotal=quantize_money(subtotal),
+            discount_total=quantize_money(discount_total),
+            tax_total=quantize_money(tax_total),
+            total=quantize_money(total),
+            actor_id=actor,
+            now=now,
+        )
+        write_audit_log(
+            database,
+            actor_id=actor,
+            action="sales_order.returned",
+            resource="sales_return",
+            resource_id=sales_return["_id"],
+            outcome="success",
+            now=now,
+            session=session,
+        )
+        updated_order = find_sales_order_by_id(database, parsed_id, session=session)
+        if updated_order is None:
+            raise NotFoundError("Sales order was not found.")
+        return {
+            "sales_return": serialize_document(public_sales_return(sales_return)),
+            "sales_order": _public_sales_order(updated_order),
+        }
+
+    return _run_transaction(database, operation)

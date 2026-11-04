@@ -1577,3 +1577,68 @@
 ### Next step
 
 - Stop here for acceptance. After approval, implement and validate the next separately requested sales workflow step; do not begin it automatically.
+
+## 2026-11-04 — Sales orders, part 2
+
+### Files created
+
+- `backend/sales/invoice_urls.py` — routes the authorized invoice list and detail endpoints under `/api/invoices/`.
+- `backend/sales/payment_urls.py` — routes the authorized paginated payment list under `/api/payments/`.
+
+### Files modified
+
+- `backend/config/urls.py` — mounted the invoice and payment routes.
+- `backend/database/indexes.py` — added the sales return/credit-note collection validator and indexes, invoice line snapshot fields, and order payment/return accounting fields.
+- `backend/sales/serializers.py` — validates payment and return bodies plus invoice/payment list filters, rejecting unsafe or undeclared input.
+- `backend/sales/repository.py` — adds invoice, payment, and credit-note persistence/listing, yearly counters, conditional payment balance updates, and returned-quantity updates.
+- `backend/sales/services.py` — implements transactional idempotent fulfillment, invoice creation, payment accounting, and stock-restocking returns with audit events.
+- `backend/sales/urls.py` — adds fulfill, payment-record, and return routes before the sales-order detail route.
+- `backend/sales/views.py` — adds authenticated endpoints, permissions, request validation, and response envelopes.
+- `backend/tests/accounts/fakes.py` — adds unique-key behavior for new collections and support for optional unique values and `$exists` checks.
+- `backend/tests/database/test_indexes.py` — covers new collection, index, return-counter, and payment-balance schema requirements.
+- `backend/tests/sales/test_sales_order_api.py` — covers idempotency, invalid fulfillment, payments, overpayment, returns, credit notes, invoices, and the complete sales lifecycle.
+- `docs/requirements.md` — defines the implemented fulfillment, payment, invoice, and return behavior and invoice due-date default.
+- `docs/api-documentation.md` — documents Sales part 2 endpoints, permissions, validation, and status codes.
+- `docs/database-design.md` — documents payment accounting, return counters, invoice snapshots, and credit-note storage.
+- `docs/postman/sales-orders.postman_collection.json` — adds fulfillment, payment, return, invoice, and payment-list requests.
+- `docs/PROGRESS.md` — records this step and its verification.
+
+### Dependencies installed
+
+- None. Existing PyMongo transaction support, shared idempotency and stock services, Decimal helpers, and DRF were reused.
+
+### Commands run and observed
+
+- Focused Sales API and schema tests: `35 passed in 0.69s`.
+- Full backend suite: `352 passed in 6.48s`.
+- Django system check: `System check identified no issues (0 silenced).`
+- Python compile check: `Python compileall: passed`.
+- Python source line-length check: `Changed Python source lines over 99 characters: none`.
+- Postman collection parse: `Valid Postman JSON: SmartERP Sales Orders - Fulfilment, Payments, Invoices and Returns 14 requests`.
+- `git diff --check`: `git diff --check: passed`.
+- An initial `py -m pytest ...` command used the global Python installation, where pytest is not installed. Reran tests with `backend\venv\Scripts\python.exe`; no dependencies were installed.
+
+### Features completed
+
+- Added `POST /api/sales-orders/{id}/fulfill/`. It requires a UUID `Idempotency-Key` and a Confirmed order. One MongoDB transaction conditionally deducts on-hand and reserved stock, writes `sale_fulfilment` movements, transitions the order, creates the numbered invoice with a 30-day due date, and writes an audit event. Same-key retries replay the saved response; a distinct key cannot fulfill twice.
+- Added transactional payments for fulfilled orders. Exact decimal amounts cannot exceed the outstanding balance; `paid_total` is compare-and-set and `payment_status` is server-derived. Payment references are optional and unique when supplied.
+- Added authorized, filtered/paginated `GET /api/payments/`, `GET /api/invoices/`, and `GET /api/invoices/{id}/`.
+- Added `POST /api/sales-orders/{id}/returns/`. It conditionally limits returns to remaining fulfilled quantities, increments each line's returned count, restocks through `apply_stock_change`, writes `sale_return` movements, keeps the order Fulfilled, updates `return_status`, stores a numbered credit-note record with reason and calculated totals, and writes an audit event.
+- Added endpoint documentation, database design notes, collection validation/index definitions, and Postman examples.
+
+### Tests passed
+
+- Full backend suite: 352 passed.
+- Sales API and database schema focused tests: 35 passed.
+- Django check, Python compilation, Postman JSON parsing, source line-length check, and `git diff --check`: passed.
+
+### Known problems and not implemented yet
+
+- No live MongoDB replica-set test or authenticated Postman run was performed. Configure and initialize a replica set before exercising the transactions against a real database.
+- Printable HTML/PDF invoice generation is not implemented.
+- Returns create auditable credit notes and restock inventory; they do not issue cash refunds or alter completed payment records.
+- No frontend screens were part of this backend step.
+
+### Next step
+
+- Stop for acceptance. After approval, configure/use the local MongoDB replica set and run the documented Postman lifecycle; do not start another implementation step automatically.

@@ -1,8 +1,8 @@
 {
   "info": {
     "_postman_id": "48d84062-bd9d-4c50-93f5-b89f9ca76a85",
-    "name": "SmartERP Sales Orders - Part 1",
-    "description": "Draft order CRUD, confirm/reserve, and cancel/release. Set base_url, access_token, customer_id, and product_id first.",
+    "name": "SmartERP Sales Orders - Fulfilment, Payments, Invoices and Returns",
+    "description": "Sales order CRUD and stock workflow, plus fulfillment, invoices, payments and returns. Run create, confirm, fulfill, payment and return in order. Set base_url, access_token, customer_id, and product_id first.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -38,6 +38,10 @@
     },
     {
       "key": "sales_order_id",
+      "value": ""
+    },
+    {
+      "key": "invoice_id",
       "value": ""
     }
   ],
@@ -119,6 +123,96 @@
           "raw": "{}"
         },
         "url": "{{base_url}}/sales-orders/{{sales_order_id}}/confirm/"
+      }
+    },
+    {
+      "name": "Success - Fulfill and issue invoice",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (pm.response.code === 200) {",
+              "  const invoice = pm.response.json().data.invoice;",
+              "  pm.collectionVariables.set('invoice_id', invoice.id);",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{$guid}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{}"
+        },
+        "url": "{{base_url}}/sales-orders/{{sales_order_id}}/fulfill/"
+      }
+    },
+    {
+      "name": "Success - Record payment",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"amount\": \"10.00\",\n  \"method\": \"bank_transfer\",\n  \"reference\": \"BANK-REF-1001\"\n}"
+        },
+        "url": "{{base_url}}/sales-orders/{{sales_order_id}}/payments/"
+      }
+    },
+    {
+      "name": "Success - Return item and create credit note",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"items\": [\n    {\n      \"product_id\": \"{{product_id}}\",\n      \"quantity\": 1\n    }\n  ],\n  \"reason\": \"Customer return\"\n}"
+        },
+        "url": "{{base_url}}/sales-orders/{{sales_order_id}}/returns/"
+      }
+    },
+    {
+      "name": "Success - List invoices",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/invoices/?page=1&page_size=20"
+      }
+    },
+    {
+      "name": "Success - Get invoice",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/invoices/{{invoice_id}}/"
+      }
+    },
+    {
+      "name": "Success - List payments",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/payments/?page=1&page_size=20"
       }
     },
     {
