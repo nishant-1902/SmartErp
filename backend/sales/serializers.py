@@ -155,6 +155,10 @@ class SalesOrderListQuerySerializer(StrictSerializer):
         choices=("draft", "confirmed", "fulfilled", "cancelled"),
         required=False,
     )
+    payment_status = serializers.ChoiceField(
+        choices=("unpaid", "partial", "paid"),
+        required=False,
+    )
     customer_id = serializers.CharField(required=False, trim_whitespace=True)
 
     def validate_customer_id(self, value):

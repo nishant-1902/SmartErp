@@ -94,10 +94,17 @@ export const navigationItems = [
     implemented: true,
   },
   {
+    label: 'Customers',
+    path: '/customers',
+    icon: '♧',
+    requiredPermission: 'customers:read',
+    implemented: true,
+  },
+  {
     label: 'Sales',
-    path: '/sales',
+    path: '/sales-orders',
     icon: '↗',
     requiredPermission: 'sales:read',
-    implemented: false,
+    implemented: true,
   },
 ]

@@ -1642,3 +1642,88 @@
 ### Next step
 
 - Stop for acceptance. After approval, configure/use the local MongoDB replica set and run the documented Postman lifecycle; do not start another implementation step automatically.
+
+## 2026-11-04 — Customers and Sales React workflows
+
+### Files created
+
+- `frontend/src/services/customerService.js` — customer list, detail, create/update, and sales-history API calls.
+- `frontend/src/services/salesOrderService.js` — sales-order list/create/detail/update and confirm/cancel/fulfil/payment/return API calls.
+- `frontend/src/services/invoiceService.js` — invoice list and detail API calls.
+- `frontend/src/utils/salesPreview.js` — integer-cent, per-line rounded display estimate; it does not determine stored order values.
+- `frontend/src/components/CustomerFormModal.jsx` — customer create/edit form with address and optional tax/credit fields.
+- `frontend/src/components/SalesProductPicker.jsx` — active-product search and available-stock display based on on-hand minus reserved stock.
+- `frontend/src/components/SalesStatusBadge.jsx` — shared order, payment, and return status badges.
+- `frontend/src/components/RecordPaymentModal.jsx` — payment form that retains a UUID idempotency key for retries of the same request.
+- `frontend/src/components/SalesReturnModal.jsx` — return quantity and reason form.
+- `frontend/src/pages/Customers.jsx` — searchable/paginated customer directory and permission-gated create/update/deactivate controls.
+- `frontend/src/pages/CustomerDetail.jsx` — customer details and paginated sales history.
+- `frontend/src/pages/SalesOrders.jsx` — sales-order list with customer, order status, and payment status filters.
+- `frontend/src/pages/SalesOrderForm.jsx` — draft order creation with customer/product selection and display-only live estimate.
+- `frontend/src/pages/SalesOrderDetail.jsx` — status timeline and permission-gated confirm, fulfil, cancel, payment, return, and invoice actions.
+- `frontend/src/pages/InvoiceView.jsx` and `frontend/src/pages/invoice-print.css` — immutable invoice snapshot and browser print stylesheet.
+- `frontend/src/utils/salesPreview.test.js` — display-estimate calculation and invalid-input tests.
+- `frontend/src/services/salesOrderService.test.js` — sales-order filters and fulfilment/payment idempotency header tests.
+- `frontend/src/pages/Customers.test.jsx`, `CustomerDetail.test.jsx`, `SalesOrders.test.jsx`, `SalesOrderForm.test.jsx`, `SalesOrderDetail.test.jsx`, and `InvoiceView.test.jsx` — customer and sales workflow UI tests.
+
+### Files modified
+
+- `frontend/src/App.jsx` — added protected customer, sales-order, and invoice routes.
+- `frontend/src/config/navigation.js` — enabled the Sales navigation item and added Customers.
+- `backend/common/permissions_matrix.py` — grants Inventory Managers `sales:read` in addition to the pre-existing `sales:fulfil`, per owner approval.
+- `backend/customers/views.py` — customer order-history reads require both customer and sales read permissions.
+- `backend/sales/repository.py`, `serializers.py`, and `services.py` — added validated payment-status order filtering.
+- `backend/sales/views.py` and `services.py` — require and use idempotency keys for payment writes, matching the frontend retry behavior.
+- `backend/tests/sales/test_sales_order_api.py` — verifies payment-key replay compatibility, payment-status list filtering, and Inventory Manager order reads.
+- `backend/tests/customers/test_customer_api.py` — verifies customer order-history authorization remains separate from general sales reads.
+- `frontend/src/hooks/usePaginatedList.test.jsx` — waits for the async result state update after the second debounced request.
+- `docs/requirements.md` — records the approved Inventory Manager sales-read grant and points to current implementation progress.
+- `docs/api-documentation.md` — documents payment idempotency keys and the order payment-status filter.
+- `docs/PROGRESS.md` — recorded this implementation and validation results.
+
+### Dependencies installed
+
+- None. Existing React, React Bootstrap, React Hook Form, Yup, Axios, DRF, PyMongo, and transaction/idempotency helpers were reused.
+
+### Commands run and observed
+
+- Initial frontend/backend commands were run from the repository root and failed to locate their package/virtual-environment files. Reran from `frontend\` and `backend\`.
+- Initial focused tests exposed a missing available-stock display and an empty estimate caused by the API product-price field name; both UI issues were corrected.
+- `npm test` from `frontend\` — `Test Files 37 passed (37); Tests 96 passed (96); Duration 33.39s`.
+- `npm run lint` from `frontend\` — passed with no diagnostics.
+- `npm run build` from `frontend\` — passed; Vite transformed 400 modules and built in 1.08s.
+- `.\venv\Scripts\python.exe -m pytest` from `backend\` — `353 passed in 28.75s`.
+- `.\venv\Scripts\python.exe -m pytest tests\sales\test_sales_order_api.py` — `28 passed in 0.55s`.
+- `npm test -- src/pages/SalesOrders.test.jsx` — `2 passed`; focused customer and sales API tests — `56 passed in 1.21s`.
+- `.\venv\Scripts\python.exe manage.py check` from `backend\` — `System check identified no issues (0 silenced).`
+- `git diff --check` — passed with no output.
+
+### Features completed
+
+- Added customer directory and detail/history screens. Create/edit/deactivate controls are hidden unless the user has customer write permission; server responses remain authoritative.
+- Added searchable active-customer and active-product selection for sales drafts. Available stock is shown as `quantity_on_hand - reserved_quantity`.
+- The order form provides a client-only estimate while sending only `customer_id`, product IDs, quantities, discount percentages, and tax percentages. Product price and saved totals are still calculated by the backend.
+- Added paginated sales-order browsing, customer/order/payment filters, status badges, order details, timeline, and permission-gated state transitions.
+- Added fulfillment with a retained UUID retry key, payment entry with a body-stable retry key, return entry, and an invoice link.
+- Added an invoice snapshot page that calls `window.print()` and uses print-specific CSS.
+- Added payment-status filtering to the sales-order list API because the requested UI filter was not supported by the previous API.
+- Added an idempotency key to payment writes and documented it so duplicate browser submissions cannot record the same payment twice.
+- Granted Inventory Managers `sales:read` after owner approval so they can navigate to and open orders they may fulfil. Customer, payment, invoice, and return permissions remain separate.
+- Customer-specific sales history checks both `customers:read` and `sales:read`; Inventory Managers do not gain access to customer-master/history endpoints from their order-read grant.
+
+### Tests passed
+
+- Frontend tests: 96 passed.
+- Backend tests: 353 passed, including 29 sales API tests and the customer-history authorization guard.
+- Frontend lint, production build, Django system check, and `git diff --check`: passed.
+
+### Known problems and not implemented yet
+
+- Customer hard-delete is not supported by the backend API; customers can be updated or deactivated instead.
+- Native PDF generation is not implemented. Invoice printing uses the browser's print dialog and print stylesheet.
+- No live browser-to-backend run, live MongoDB replica-set test, or Postman execution was performed; backend tests use the repository's fake database.
+- No new dependencies were installed.
+
+### Next step
+
+- Stop for acceptance. Do not start another implementation step automatically.

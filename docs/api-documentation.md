@@ -11,8 +11,9 @@ substring search. Sort fields are explicitly allowlisted.
 
 Customer endpoints require a bearer access token. Customer list and detail reads
 require `customers:read`; create and update require `customers:write` (Sales
-Manager or Super Admin). Customer sales-order history requires `sales:read`
-(Sales Manager or Super Admin).
+Manager or Super Admin). Customer sales-order history requires both
+`customers:read` and `sales:read` (Sales Manager or Super Admin); Inventory
+Managers can read sales orders for fulfilment but not customer history.
 
 ### List customers
 
@@ -83,7 +84,9 @@ Manager or Super Admin). Customer sales-order history requires `sales:read`
 ### Customer sales-order history
 
 - **Method and URL:** `GET /api/customers/{id}/sales-orders/`.
-- **Role:** Sales Manager or Super Admin (`sales:read`).
+- **Roles:** Requires both `customers:read` and `sales:read` (Sales Manager or
+  Super Admin). Inventory Managers can read sales orders to fulfil them but do
+  not receive customer-master/history access.
 - **Query parameters:** `page` (default `1`), `page_size` (default `20`,
   maximum `100`), and optional `status` (`draft`, `confirmed`, `fulfilled`, or
   `cancelled`).
@@ -98,7 +101,8 @@ Manager or Super Admin). Customer sales-order history requires `sales:read`
 Sales-order list/detail reads require `sales:read`. Creating or editing a Draft
 order requires `sales:create`; Confirm requires `sales:confirm`; Cancel requires
 `sales:cancel`. The permission matrix grants management actions to Sales
-Managers and Super Admins; reads are role-limited by `sales:read`.
+Managers and Super Admins; `sales:read` is granted to Sales Managers,
+Inventory Managers (for fulfilment), and Super Admins.
 
 ### List and create sales orders
 
@@ -187,6 +191,9 @@ Admin according to the permission matrix). Payment recording requires
 - **Record method and URL:** `POST /api/sales-orders/{id}/payments/`.
 - **Request body:** `amount` as an exact decimal string, `method` (`cash`,
   `bank_transfer`, `card`, or `other`), and optional `reference`.
+- **Headers:** `Idempotency-Key` is required and must be a UUID. A retry with
+  the same key and body replays the original payment; reuse with a different
+  body is rejected.
 - **Behavior:** Only fulfilled orders accept payments. Overpayment is rejected
   with `409`; payment inserts, paid-total compare-and-set, server-derived
   `payment_status` (`partial` or `paid`), and an audit event share a MongoDB

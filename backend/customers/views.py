@@ -122,6 +122,8 @@ def customer_detail_view(request, customer_id: str):
 @permission_classes([IsAuthenticatedMongo])
 def customer_sales_orders_view(request, customer_id: str):
     """Return paginated sales orders associated with one customer."""
+    if not has_permission(request.user, "customers:read"):
+        return _permission_denied("customers:read")
     if not has_permission(request.user, "sales:read"):
         return _permission_denied("sales:read")
     parsed_id = parse_object_id(customer_id)

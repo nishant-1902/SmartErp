@@ -18,6 +18,8 @@ const Inventory = lazy(() => import('./pages/Inventory.jsx'))
 const StockMovements = lazy(() => import('./pages/StockMovements.jsx'))
 const Suppliers = lazy(() => import('./pages/Suppliers.jsx'))
 const SupplierDetail = lazy(() => import('./pages/SupplierDetail.jsx'))
+const Customers = lazy(() => import('./pages/Customers.jsx'))
+const CustomerDetail = lazy(() => import('./pages/CustomerDetail.jsx'))
 const Purchases = lazy(() => import('./pages/Purchases.jsx'))
 const PurchaseOrderForm = lazy(() => import('./pages/PurchaseOrderForm.jsx'))
 const PurchaseOrderDetail = lazy(() => import('./pages/PurchaseOrderDetail.jsx'))
@@ -25,6 +27,10 @@ const Users = lazy(() => import('./pages/Users.jsx'))
 const Profile = lazy(() => import('./pages/Profile.jsx'))
 const Settings = lazy(() => import('./pages/Settings.jsx'))
 const AuditLogs = lazy(() => import('./pages/AuditLogs.jsx'))
+const SalesOrders = lazy(() => import('./pages/SalesOrders.jsx'))
+const SalesOrderForm = lazy(() => import('./pages/SalesOrderForm.jsx'))
+const SalesOrderDetail = lazy(() => import('./pages/SalesOrderDetail.jsx'))
+const InvoiceView = lazy(() => import('./pages/InvoiceView.jsx'))
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword.jsx'))
 const ResetPassword = lazy(() => import('./pages/ResetPassword.jsx'))
 const Login = lazy(() => import('./pages/Login.jsx'))
@@ -142,6 +148,32 @@ function App() {
                   >
                     <Route index element={<Suppliers />} />
                     <Route path=":supplierId" element={<SupplierDetail />} />
+                  </Route>
+                  <Route
+                    element={<RoleRoute permission="customers:read" />}
+                    path="customers"
+                  >
+                    <Route index element={<Customers />} />
+                    <Route path=":customerId" element={<CustomerDetail />} />
+                  </Route>
+                  <Route
+                    element={<RoleRoute permission="sales:read" />}
+                    path="sales-orders"
+                  >
+                    <Route index element={<SalesOrders />} />
+                    <Route
+                      element={<RoleRoute permission="sales:create" />}
+                      path="new"
+                    >
+                      <Route index element={<SalesOrderForm />} />
+                    </Route>
+                    <Route path=":salesOrderId" element={<SalesOrderDetail />} />
+                  </Route>
+                  <Route
+                    element={<RoleRoute permission="invoices:read" />}
+                    path="invoices/:invoiceId"
+                  >
+                    <Route index element={<InvoiceView />} />
                   </Route>
                   <Route
                     element={<RoleRoute permission="purchase:read" />}

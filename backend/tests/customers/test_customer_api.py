@@ -392,7 +392,10 @@ def test_customer_sales_order_history_is_paginated_and_filtered(client, customer
     }
 
 
-def test_customer_sales_order_history_requires_sales_read(client, customer_api):
+def test_customer_sales_order_history_requires_customer_and_sales_read(
+    client,
+    customer_api,
+):
     inventory_manager = insert_user(customer_api, "inventory_manager")
     customer = insert_customer(customer_api)
 

@@ -383,6 +383,7 @@ def test_list_detail_and_draft_patch(client, sales_api):
 
     listing = client.get(
         f"/api/sales-orders/?status=draft&customer_id={customer['_id']}"
+        "&payment_status=unpaid"
         "&page=1&page_size=1",
         **auth_headers(user),
     )
@@ -409,7 +410,37 @@ def test_list_detail_and_draft_patch(client, sales_api):
         "/api/sales-orders/?customer_id=not-an-object-id",
         **auth_headers(user),
     )
+    invalid_payment_status = client.get(
+        "/api/sales-orders/?payment_status=overdue",
+        **auth_headers(user),
+    )
     assert invalid.status_code == 400
+    assert invalid_payment_status.status_code == 400
+
+
+def test_inventory_manager_can_read_orders_to_fulfil(client, sales_api):
+    sales_manager = insert_user(sales_api)
+    inventory_manager = insert_user(sales_api, "inventory_manager")
+    customer = insert_customer(sales_api)
+    product = insert_product(sales_api)
+    created = create_order(
+        client,
+        sales_manager,
+        customer,
+        [order_item(product)],
+    )
+    order_id = created.json()["data"]["sales_order"]["id"]
+
+    listing = client.get("/api/sales-orders/", **auth_headers(inventory_manager))
+    detail = client.get(
+        f"/api/sales-orders/{order_id}/",
+        **auth_headers(inventory_manager),
+    )
+
+    assert listing.status_code == 200
+    assert listing.json()["meta"]["total"] == 1
+    assert detail.status_code == 200
+    assert detail.json()["data"]["sales_order"]["id"] == order_id
 
 
 def test_confirm_reserves_stock_without_deducting_on_hand(client, sales_api):
@@ -810,7 +841,7 @@ def test_payment_partial_full_and_overpayment(client, sales_api):
     assert confirm_order(client, user, order_id).status_code == 200
     assert fulfill_order(client, user, order_id).status_code == 200
 
-    def pay(amount, reference=None):
+    def pay(amount, reference=None, key=None):
         body = {"amount": amount, "method": "bank_transfer"}
         if reference is not None:
             body["reference"] = reference
@@ -818,16 +849,21 @@ def test_payment_partial_full_and_overpayment(client, sales_api):
             f"/api/sales-orders/{order_id}/payments/",
             body,
             format="json",
+            HTTP_IDEMPOTENCY_KEY=key or str(uuid4()),
             **auth_headers(user),
         )
 
-    partial = pay("20.00", "PAY-001")
+    payment_key = str(uuid4())
+    partial = pay("20.00", "PAY-001", key=payment_key)
+    replay = pay("20.00", "PAY-001", key=payment_key)
     overpay = pay("30.01", "PAY-002")
     final = pay("30.00", "PAY-003")
     listing = client.get("/api/payments/?page=1&page_size=10", **auth_headers(user))
 
     stored = sales_api["sales_orders"].find_one({"_id": ObjectId(order_id)})
     assert partial.status_code == 201
+    assert replay.status_code == 201
+    assert replay.json() == partial.json()
     assert partial.json()["data"]["sales_order"]["payment_status"] == "partial"
     assert overpay.status_code == 409
     assert final.status_code == 201
@@ -921,6 +957,7 @@ def test_invoice_list_detail_and_full_sales_lifecycle(client, sales_api):
         f"/api/sales-orders/{order_id}/payments/",
         {"amount": "37.80", "method": "cash"},
         format="json",
+        HTTP_IDEMPOTENCY_KEY=str(uuid4()),
         **auth_headers(user),
     )
     returned = client.post(

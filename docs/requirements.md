@@ -166,7 +166,7 @@ Each user has exactly one assigned role in the initial model. Additional roles, 
 | `customers:read` | Yes | — | — | — | Yes | — |
 | `customers:write` | Yes | — | — | — | Yes | — |
 | `sales:create` | Yes | — | — | — | Yes | — |
-| `sales:read` | Yes | — | — | — | Yes | — |
+| `sales:read` | Yes | — | Yes | — | Yes | — |
 | `sales:confirm` | Yes | — | — | — | Yes | — |
 | `sales:fulfil` | Yes | — | Yes | — | Yes | — |
 | `sales:cancel` | Yes | — | — | — | Yes | — |
@@ -180,7 +180,7 @@ Each user has exactly one assigned role in the initial model. Additional roles, 
 ### Permission notes
 
 - Managers receive read access to adjacent master data needed to perform their own workflows; they do not get write permissions outside their module.
-- Inventory Manager can read suppliers/purchase records needed for receiving goods, and can fulfil confirmed sales because stock release/deduction is an inventory operation. Sales Manager can fulfil as well; the backend still executes the shared stock service. Confirm whether fulfilment should be Sales Manager only instead.
+- Inventory Manager can read sales orders needed to fulfil them, but does not receive customer-master read access, payment, invoice, or return permissions. Inventory Manager and Sales Manager can fulfil confirmed sales because stock release/deduction is an inventory operation; the backend still executes the shared stock service.
 - All managers can read report endpoints, but the backend should filter widgets/data according to role. Confirm whether reports should instead be limited to Super Admin.
 - Audit-log access is restricted to Super Admin in this proposal because audit events can include personal/security-sensitive activity.
 - `Conditional` purchase approval does not mean an unconditional role grant; the service checks the order creator and current status on every approval attempt.
@@ -261,5 +261,6 @@ The owner confirmed the complete permission matrix and workflow proposal on 2026
 2. A Super Admin may approve their own purchase order; all other creators require a different approver.
 3. Both Sales Manager and Inventory Manager may fulfil sales.
 4. Sales follow Draft → Confirmed → Fulfilled; cancellation is allowed before fulfilment; returns are tracked separately.
+5. On 2026-11-04, the owner approved granting Inventory Managers `sales:read` so they can find and open orders they are authorized to fulfil. This does not grant customer-master, payment, invoice, or return access.
 
-These are approved requirements. The backend implements customer read/write endpoints and Sales part 1 currently implements Draft sales-order CRUD plus Confirm/Cancel stock reservation workflows. Fulfilment, payments, invoices, returns, and remaining report workflows are not implemented yet.
+These are approved requirements. Current implementation and verification status is recorded in the dated sections of `docs/PROGRESS.md`.

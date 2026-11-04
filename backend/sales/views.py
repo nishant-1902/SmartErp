@@ -86,6 +86,7 @@ def sales_orders_list_create_view(request):
             orders, meta = list_sales_orders(
                 database,
                 status=filters.get("status"),
+                payment_status=filters.get("payment_status"),
                 customer_id=filters.get("customer_id"),
                 pagination=_pagination(filters),
             )
@@ -186,6 +187,7 @@ def sales_order_payment_view(request, sales_order_id: str):
             parsed_id,
             values=values,
             actor_id=request.user.id,
+            idempotency_key=request.headers.get("Idempotency-Key"),
         )
     return success_response(result, status=201)
 

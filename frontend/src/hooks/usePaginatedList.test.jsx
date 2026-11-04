@@ -25,7 +25,7 @@ describe('usePaginatedList', () => {
 
     await waitFor(() => expect(fetchPage).toHaveBeenCalledTimes(2))
     expect(fetchPage.mock.calls[1][0].search).toBe('Ada')
-    expect(result.current.items).toEqual([{ id: 'Ada' }])
+    await waitFor(() => expect(result.current.items).toEqual([{ id: 'Ada' }]))
   })
 
   it('aborts stale requests and never displays stale results', async () => {

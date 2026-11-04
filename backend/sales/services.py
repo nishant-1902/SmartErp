@@ -213,6 +213,7 @@ def list_sales_orders(
     database: Database[Any],
     *,
     status: str | None,
+    payment_status: str | None,
     customer_id: ObjectId | None,
     pagination: Pagination,
 ) -> tuple[list[dict[str, Any]], dict[str, int]]:
@@ -220,6 +221,7 @@ def list_sales_orders(
     orders = list_sales_order_records(
         database,
         status=status,
+        payment_status=payment_status,
         customer_id=customer_id,
         skip=pagination.skip,
         limit=pagination.limit,
@@ -227,6 +229,7 @@ def list_sales_orders(
     total = count_sales_orders(
         database,
         status=status,
+        payment_status=payment_status,
         customer_id=customer_id,
     )
     return [_public_sales_order(order) for order in orders], pagination.build_meta(total)
@@ -547,8 +550,9 @@ def record_payment(
     *,
     values: dict[str, Any],
     actor_id: ObjectId | str,
+    idempotency_key: str | None,
 ) -> dict[str, Any]:
-    """Record a completed payment without allowing the order to be overpaid."""
+    """Idempotently record a payment without allowing an order overpayment."""
     parsed_id = parse_object_id(sales_order_id)
     actor = parse_object_id(actor_id)
     amount = to_decimal(values["amount"])
@@ -621,7 +625,14 @@ def record_payment(
             "sales_order": _public_sales_order(updated_order),
         }
 
-    return _run_transaction(database, operation)
+    return execute_idempotent(
+        database,
+        user_id=actor,
+        endpoint=f"sales-orders:{parsed_id}:payment",
+        key=idempotency_key or "",
+        request_body=values,
+        operation=lambda session, _operation_id: operation(session),
+    )
 
 
 def list_payments(

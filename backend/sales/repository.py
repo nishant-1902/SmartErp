@@ -175,6 +175,7 @@ def list_sales_orders(
     database: Database[Any],
     *,
     status: str | None,
+    payment_status: str | None,
     customer_id: ObjectId | None,
     skip: int,
     limit: int,
@@ -183,6 +184,8 @@ def list_sales_orders(
     query: dict[str, Any] = {}
     if status is not None:
         query["status"] = status
+    if payment_status is not None:
+        query["payment_status"] = payment_status
     if customer_id is not None:
         query["customer_id"] = customer_id
     return [
@@ -201,12 +204,15 @@ def count_sales_orders(
     database: Database[Any],
     *,
     status: str | None,
+    payment_status: str | None,
     customer_id: ObjectId | None,
 ) -> int:
     """Count orders matching the list filters."""
     query: dict[str, Any] = {}
     if status is not None:
         query["status"] = status
+    if payment_status is not None:
+        query["payment_status"] = payment_status
     if customer_id is not None:
         query["customer_id"] = customer_id
     return database["sales_orders"].count_documents(query)

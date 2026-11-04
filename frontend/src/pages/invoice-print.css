@@ -1,0 +1,39 @@
+@media print {
+  @page {
+    size: A4;
+    margin: 16mm;
+  }
+
+  body,
+  :root {
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  .app-sidebar,
+  .app-navbar,
+  .invoice-actions,
+  .toast-container {
+    display: none !important;
+  }
+
+  .app-content-shell,
+  .app-main,
+  .invoice-paper {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    background: #fff !important;
+  }
+
+  .invoice-paper {
+    break-inside: avoid;
+  }
+
+  .invoice-paper table {
+    font-size: 10pt;
+  }
+}

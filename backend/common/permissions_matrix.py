@@ -66,6 +66,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             "suppliers:read",
             "purchase:read",
             "purchase:receive",
+            "sales:read",
             "sales:fulfil",
             "reports:read",
         }
