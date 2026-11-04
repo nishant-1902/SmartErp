@@ -1052,15 +1052,13 @@ size and distribution.
 
 ## Postman
 
-Import [`postman/departments.postman_collection.json`](./postman/departments.postman_collection.json),
-[`postman/employees.postman_collection.json`](./postman/employees.postman_collection.json),
-[`postman/products.postman_collection.json`](./postman/products.postman_collection.json),
-[`postman/stock.postman_collection.json`](./postman/stock.postman_collection.json),
-and [`postman/reports.postman_collection.json`](./postman/reports.postman_collection.json).
-Set collection variables `base_url` (for example `http://localhost:8000/api`)
-and role-appropriate `access_token`; the employee collection also uses
-`employee_access_token` for the self-profile request. The product collection
-uses `product_id` and a generated SKU for its create/read/update requests.
-The stock collection uses a `product_id` and includes an adjustment key.
-Requests include successful flows and negative validation, permission,
-duplicate, and deactivation examples.
+Import the unified
+[`SmartERP Postman collection`](./postman/SmartERP.postman_collection.json)
+and [`SmartERP local environment`](./postman/SmartERP.local.postman_environment.json).
+The collection has 15 folders, status/envelope assertions, authentication,
+business-resource workflows, reports, and negative cases. The local
+environment contains blank credentials and generated identifiers; configure
+it for a disposable database before running write requests. See
+[`docs/testing.md`](./testing.md) for Postman Runner/Newman instructions, the
+expired-token helper, dependencies between requests, and the manual
+database-unavailable check.

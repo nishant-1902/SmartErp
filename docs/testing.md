@@ -79,3 +79,85 @@ Read a pytest traceback from the bottom upward:
 
 Run the named test alone with its node ID after fixing the cause, then rerun the
 full suite.
+
+## Run the Postman API collection
+
+Import `docs/postman/SmartERP.postman_collection.json` and
+`docs/postman/SmartERP.local.postman_environment.json` into Postman, then select
+the **SmartERP local** environment. The local environment intentionally has
+blank credentials and IDs; enter your local Super Admin email/password and an
+Employee account email/password. Do not commit credentials, access tokens, or
+an exported environment containing secrets.
+
+Set `baseUrl` to the backend API root, normally
+`http://localhost:8000/api`. The Auth folder's login requests save bearer
+tokens in `accessToken` and `employeeAccessToken`. Login also puts the refresh
+cookie in Postman's cookie jar. The refresh request relies on that jar and sends
+the required `X-Requested-With: XMLHttpRequest` header; do not manually
+copy the HttpOnly refresh cookie into an environment variable or request
+header.
+
+The collection has 15 folders covering health, authentication, user and
+business resources, reports, and negative cases. Each request checks its
+expected HTTP status and the standard success or error JSON envelope.
+Idempotent stock adjustment, purchase receipt, fulfilment, and payment requests
+generate a fresh UUID with Postman's `{{$guid}}` dynamic value. If testing a
+retry, reuse the same `Idempotency-Key` and do not rerun its pre-request script.
+
+For a complete successful workflow, create or configure a department, product,
+supplier, and customer first. The product and supplier IDs are stored when
+their create requests succeed; the employee request needs an active
+`departmentId`. Stock adjustment adds initial inventory. Then create, submit,
+and approve a purchase order, receive it in the Receipts folder, and run the
+customer and sales-order workflow. The sales-order request uses the returned
+customer/product IDs; confirm and fulfil it before recording a payment or
+return. The collection's Reject and Cancel purchase-order examples require
+separate eligible IDs. Optional IDs can instead be supplied manually in the
+environment. Collection examples change data in the selected database, so use
+a disposable local database when exercising write workflows.
+
+### Expired-token negative test
+
+With the backend virtual environment activated and a local user already
+created, run from `backend\`:
+
+```powershell
+.\venv\Scripts\python.exe scripts\make_expired_token.py --email admin@example.com
+```
+
+Alternatively, select a user by MongoDB ID:
+
+```powershell
+.\venv\Scripts\python.exe scripts\make_expired_token.py --user-id 65a000000000000000000001
+```
+
+Copy the printed JWT into the environment's `expiredToken` value. The script
+uses the configured local MongoDB and JWT settings, prints only the token on
+success, and does not change the user or database.
+
+### Collection Runner and Newman
+
+Run the whole collection or selected folders with Postman's Collection Runner.
+Run Auth login first when testing only selected requests. Some requests depend
+on IDs saved by earlier create calls; requests with independent IDs must have
+those IDs entered in the environment. The Employee permission test needs a
+valid Employee token, which the second login request stores.
+
+If Newman is already installed, run the collection from the repository root:
+
+```powershell
+newman run docs\postman\SmartERP.postman_collection.json `
+  --environment docs\postman\SmartERP.local.postman_environment.json
+```
+
+Newman does not persist sensitive environment values unless explicitly
+exported. Avoid `--export-environment` for the tracked local template.
+
+Database-unavailable validation is documented as a manual step and is not a
+runnable collection request. On an isolated local database only, stop MongoDB
+or block the backend's MongoDB connection, call
+`GET {{baseUrl}}/reports/dashboard/`, and verify that the dashboard returns
+HTTP 200 with a standard success envelope and non-empty
+`data.dashboard.widget_errors`; error messages must not disclose database
+details. Restore MongoDB immediately afterward. Never stop or disrupt a shared
+or production database for this check.

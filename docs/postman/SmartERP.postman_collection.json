@@ -1,0 +1,4355 @@
+{
+  "info": {
+    "_postman_id": "c3e83628-7ef0-45ca-9f2e-020fe0efbaf5",
+    "name": "SmartERP API",
+    "description": "SmartERP API v2.1 collection. Import the matching local environment. Authenticate with a Super Admin account for the workflow requests; set or create related IDs as documented. Database-unavailable test is manual only.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8000/api"
+    },
+    {
+      "key": "accessToken",
+      "value": ""
+    },
+    {
+      "key": "employeeAccessToken",
+      "value": ""
+    },
+    {
+      "key": "loginEmail",
+      "value": ""
+    },
+    {
+      "key": "loginPassword",
+      "value": ""
+    },
+    {
+      "key": "employeeLoginEmail",
+      "value": ""
+    },
+    {
+      "key": "employeeLoginPassword",
+      "value": ""
+    },
+    {
+      "key": "expiredToken",
+      "value": ""
+    },
+    {
+      "key": "invalidToken",
+      "value": "not-a-valid-jwt"
+    },
+    {
+      "key": "idempotencyKey",
+      "value": ""
+    },
+    {
+      "key": "userId",
+      "value": ""
+    },
+    {
+      "key": "employeeId",
+      "value": ""
+    },
+    {
+      "key": "departmentId",
+      "value": ""
+    },
+    {
+      "key": "productId",
+      "value": ""
+    },
+    {
+      "key": "productSku",
+      "value": ""
+    },
+    {
+      "key": "supplierId",
+      "value": ""
+    },
+    {
+      "key": "purchaseOrderId",
+      "value": ""
+    },
+    {
+      "key": "rejectablePurchaseOrderId",
+      "value": ""
+    },
+    {
+      "key": "cancellablePurchaseOrderId",
+      "value": ""
+    },
+    {
+      "key": "receiptId",
+      "value": ""
+    },
+    {
+      "key": "customerId",
+      "value": ""
+    },
+    {
+      "key": "salesOrderId",
+      "value": ""
+    },
+    {
+      "key": "oversellOrderId",
+      "value": ""
+    },
+    {
+      "key": "invoiceId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Liveness",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/health/"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login - Super Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});",
+                  "if (pm.response.code === 200 && pm.response.json().success === true) {",
+                  "  pm.environment.set(\"accessToken\", pm.response.json().data['access_token']);",
+                  "}",
+                  "pm.environment.set(\"accessToken\", pm.response.json().data.access_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{loginEmail}}\",\n  \"password\": \"{{loginPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/auth/login/"
+          }
+        },
+        {
+          "name": "Refresh - rotate cookie token",
+          "description": "Postman sends the HttpOnly smarterp_refresh cookie from its cookie jar; do not add a Cookie header.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});",
+                  "pm.environment.set(\"accessToken\", pm.response.json().data.access_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Requested-With",
+                "value": "XMLHttpRequest"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/auth/refresh/"
+          }
+        },
+        {
+          "name": "Login - Employee for permission tests",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});",
+                  "pm.environment.set(\"employeeAccessToken\", pm.response.json().data.access_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{employeeLoginEmail}}\",\n  \"password\": \"{{employeeLoginPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/auth/login/"
+          }
+        },
+        {
+          "name": "Current user",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/auth/me/"
+          }
+        },
+        {
+          "name": "Logout - revoke refresh session",
+          "description": "Uses and clears the refresh cookie stored by Postman's cookie jar.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Requested-With",
+                "value": "XMLHttpRequest"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/auth/logout/"
+          }
+        },
+        {
+          "name": "Request password reset",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{loginEmail}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/auth/password-reset/request/"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "List users",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/users/?page=1&page_size=20"
+          }
+        },
+        {
+          "name": "Create employee-role user",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set(\"newUserEmail\", \"postman.\" + pm.variables.replaceIn(\"{{$guid}}\") + \"@example.test\");",
+                  "pm.environment.set(\"newUserPassword\", \"Postman-\" + pm.variables.replaceIn(\"{{$guid}}\") + \"-Strong!9\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201 expected', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});",
+                  "if (pm.response.code === 201 && pm.response.json().success === true) {",
+                  "  pm.environment.set(\"userId\", pm.response.json().data['user']['id']);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{newUserEmail}}\",\n  \"password\": \"{{newUserPassword}}\",\n  \"full_name\": \"Postman Test User\",\n  \"role\": \"employee\",\n  \"employee_id\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/users/"
+          }
+        },
+        {
+          "name": "Get user",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/users/{{userId}}/"
+          }
+        },
+        {
+          "name": "Update user",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Updated Postman User\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/users/{{userId}}/"
+          }
+        },
+        {
+          "name": "Deactivate user",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/users/{{userId}}/deactivate/"
+          }
+        },
+        {
+          "name": "Activate user",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/users/{{userId}}/activate/"
+          }
+        },
+        {
+          "name": "Request admin password reset",
+          "description": "In development, the single-use reset link is printed in the backend console; email delivery is not configured.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/users/{{userId}}/reset-password/"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Employees",
+      "item": [
+        {
+          "name": "List employees",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/employees/?page=1&page_size=20"
+          }
+        },
+        {
+          "name": "Create employee",
+          "description": "Requires an existing active departmentId. Create or configure a department before sending.",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set(\"employeeCode\", \"EMP-POSTMAN-\" + pm.variables.replaceIn(\"{{$guid}}\").replace(/-/g, \"\").slice(0, 12).toUpperCase());",
+                  "pm.environment.set(\"employeeEmail\", \"employee.\" + pm.variables.replaceIn(\"{{$guid}}\") + \"@example.test\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201 expected', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});",
+                  "if (pm.response.code === 201 && pm.response.json().success === true) {",
+                  "  pm.environment.set(\"employeeId\", pm.response.json().data['employee']['id']);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"employee_code\": \"{{employeeCode}}\",\n  \"first_name\": \"Postman\",\n  \"last_name\": \"Employee\",\n  \"email\": \"{{employeeEmail}}\",\n  \"phone\": \"+1 (415) 555-0123\",\n  \"department_id\": \"{{departmentId}}\",\n  \"designation\": \"Analyst\",\n  \"joining_date\": \"2025-01-15\",\n  \"status\": \"active\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/employees/"
+          }
+        },
+        {
+          "name": "Get employee",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/employees/{{employeeId}}/"
+          }
+        },
+        {
+          "name": "Update employee",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"designation\": \"Senior Analyst\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/employees/{{employeeId}}/"
+          }
+        },
+        {
+          "name": "Employee self profile",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{employeeAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/employees/me/"
+          }
+        },
+        {
+          "name": "List designations",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/employees/designations/"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Departments",
+      "item": [
+        {
+          "name": "List departments",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/departments/?page=1&page_size=20"
+          }
+        },
+        {
+          "name": "Create department",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set(\"departmentCode\", \"DEPT-POSTMAN-\" + pm.variables.replaceIn(\"{{$guid}}\").replace(/-/g, \"\").slice(0, 12).toUpperCase());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201 expected', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});",
+                  "if (pm.response.code === 201 && pm.response.json().success === true) {",
+                  "  pm.environment.set(\"departmentId\", pm.response.json().data['department']['id']);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"{{departmentCode}}\",\n  \"name\": \"Postman Operations\",\n  \"description\": \"Collection test department\",\n  \"manager_employee_id\": null,\n  \"is_active\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/departments/"
+          }
+        },
+        {
+          "name": "Get department",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/departments/{{departmentId}}/"
+          }
+        },
+        {
+          "name": "Update department",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"Updated by Postman\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/departments/{{departmentId}}/"
+          }
+        },
+        {
+          "name": "List department employees",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/departments/{{departmentId}}/employees/?page=1&page_size=20"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Products",
+      "item": [
+        {
+          "name": "List products",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/products/?page=1&page_size=20"
+          }
+        },
+        {
+          "name": "Create product",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set(\"productSku\", \"POSTMAN-\" + pm.variables.replaceIn(\"{{$guid}}\").replace(/-/g, \"\").slice(0, 12).toUpperCase());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201 expected', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});",
+                  "if (pm.response.code === 201 && pm.response.json().success === true) {",
+                  "  pm.environment.set(\"productId\", pm.response.json().data['product']['id']);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sku\": \"{{productSku}}\",\n  \"name\": \"Postman Widget\",\n  \"description\": \"Collection test product\",\n  \"category\": \"Hardware\",\n  \"unit\": \"each\",\n  \"cost_price\": \"12.50\",\n  \"selling_price\": \"19.99\",\n  \"min_stock_level\": 5,\n  \"is_active\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/products/"
+          }
+        },
+        {
+          "name": "Get product",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/products/{{productId}}/"
+          }
+        },
+        {
+          "name": "Update product",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"Updated by Postman\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/products/{{productId}}/"
+          }
+        },
+        {
+          "name": "List low-stock products",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/products/low-stock/?page=1&page_size=20"
+          }
+        },
+        {
+          "name": "List product categories",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/products/categories/"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Stock",
+      "item": [
+        {
+          "name": "Adjust stock - add test inventory",
+          "description": "Creates available stock for later purchase and sales workflow examples.",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set(\"idempotencyKey\", pm.variables.replaceIn(\"{{$guid}}\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201 expected', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"product_id\": \"{{productId}}\",\n  \"quantity_change\": 100,\n  \"reason\": \"Postman collection test stock\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/stock-adjustments/"
+          }
+        },
+        {
+          "name": "List stock movements",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/stock-movements/?page=1&page_size=20&product={{productId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Suppliers",
+      "item": [
+        {
+          "name": "List suppliers",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/suppliers/?page=1&page_size=20"
+          }
+        },
+        {
+          "name": "Create supplier",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set(\"runId\", pm.variables.replaceIn(\"{{$guid}}\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201 expected', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});",
+                  "if (pm.response.code === 201 && pm.response.json().success === true) {",
+                  "  pm.environment.set(\"supplierId\", pm.response.json().data['supplier']['id']);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Postman Supply Co\",\n  \"contact_person\": \"Ada Lovelace\",\n  \"email\": \"buying.{{runId}}@example.test\",\n  \"phone\": \"+1 (415) 555-0199\",\n  \"address\": {\n    \"line1\": \"1 Main Street\",\n    \"city\": \"London\",\n    \"country\": \"United Kingdom\"\n  },\n  \"status\": \"active\",\n  \"payment_terms\": \"Net 30\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/suppliers/"
+          }
+        },
+        {
+          "name": "Get supplier",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/suppliers/{{supplierId}}/"
+          }
+        },
+        {
+          "name": "Update supplier",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"payment_terms\": \"Net 45\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/suppliers/{{supplierId}}/"
+          }
+        },
+        {
+          "name": "Supplier purchase history",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/suppliers/{{supplierId}}/purchase-orders/?page=1&page_size=20"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Purchase Orders",
+      "item": [
+        {
+          "name": "List purchase orders",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/purchase-orders/?page=1&page_size=20"
+          }
+        },
+        {
+          "name": "Create Draft purchase order",
+          "description": "Requires the supplierId and productId created or configured above.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201 expected', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});",
+                  "if (pm.response.code === 201 && pm.response.json().success === true) {",
+                  "  pm.environment.set(\"purchaseOrderId\", pm.response.json().data['purchase_order']['id']);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"supplier_id\": \"{{supplierId}}\",\n  \"items\": [\n    {\n      \"product_id\": \"{{productId}}\",\n      \"quantity_ordered\": 10,\n      \"unit_cost\": \"12.50\"\n    }\n  ],\n  \"tax_rate\": \"5.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/purchase-orders/"
+          }
+        },
+        {
+          "name": "Get purchase order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/purchase-orders/{{purchaseOrderId}}/"
+          }
+        },
+        {
+          "name": "Edit Draft purchase order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tax_rate\": \"5.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/purchase-orders/{{purchaseOrderId}}/"
+          }
+        },
+        {
+          "name": "Submit purchase order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/purchase-orders/{{purchaseOrderId}}/submit/"
+          }
+        },
+        {
+          "name": "Approve purchase order",
+          "description": "A user may not approve their own purchase order unless they are Super Admin.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/purchase-orders/{{purchaseOrderId}}/approve/"
+          }
+        },
+        {
+          "name": "Reject a separate pending purchase order",
+          "description": "Optional independent example: set rejectablePurchaseOrderId to a Pending Approval PO not created by this same user.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Postman test rejection\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/purchase-orders/{{rejectablePurchaseOrderId}}/reject/"
+          }
+        },
+        {
+          "name": "Cancel a separate eligible purchase order",
+          "description": "Optional independent example: set cancellablePurchaseOrderId to a Draft or Pending Approval PO.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/purchase-orders/{{cancellablePurchaseOrderId}}/cancel/"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Receipts",
+      "item": [
+        {
+          "name": "Receive approved purchase order",
+          "description": "Run after approving the collection's purchase order. This example fully receives its only line.",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set(\"idempotencyKey\", pm.variables.replaceIn(\"{{$guid}}\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201 expected', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});",
+                  "if (pm.response.code === 201 && pm.response.json().success === true) {",
+                  "  pm.environment.set(\"receiptId\", pm.response.json().data['purchase_receipt']['id']);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    {\n      \"product_id\": \"{{productId}}\",\n      \"quantity_received\": 10\n    }\n  ],\n  \"notes\": \"Postman receipt example\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/purchase-orders/{{purchaseOrderId}}/receive/"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Customers",
+      "item": [
+        {
+          "name": "List customers",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/customers/?page=1&page_size=20"
+          }
+        },
+        {
+          "name": "Create customer",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set(\"customerCode\", \"CUS-POSTMAN-\" + pm.variables.replaceIn(\"{{$guid}}\").replace(/-/g, \"\").slice(0, 12).toUpperCase());",
+                  "pm.environment.set(\"runId\", pm.variables.replaceIn(\"{{$guid}}\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201 expected', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});",
+                  "if (pm.response.code === 201 && pm.response.json().success === true) {",
+                  "  pm.environment.set(\"customerId\", pm.response.json().data['customer']['id']);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"{{customerCode}}\",\n  \"name\": \"Postman Customer\",\n  \"email\": \"accounts.{{runId}}@example.test\",\n  \"phone\": \"+1 (415) 555-0101\",\n  \"billing_address\": {\n    \"line1\": \"10 Main Street\",\n    \"city\": \"Austin\",\n    \"postal_code\": \"78701\",\n    \"country\": \"US\"\n  },\n  \"shipping_address\": null,\n  \"tax_id\": \"TAX-{{runId}}\",\n  \"status\": \"active\",\n  \"credit_limit\": \"2500.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/customers/"
+          }
+        },
+        {
+          "name": "Get customer",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/customers/{{customerId}}/"
+          }
+        },
+        {
+          "name": "Update customer",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"credit_limit\": \"3000.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/customers/{{customerId}}/"
+          }
+        },
+        {
+          "name": "Customer sales-order history",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/customers/{{customerId}}/sales-orders/?page=1&page_size=20"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Sales Orders",
+      "item": [
+        {
+          "name": "List sales orders",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/sales-orders/?page=1&page_size=20"
+          }
+        },
+        {
+          "name": "Create Draft sales order",
+          "description": "The backend ignores submitted prices and totals; it uses the product price and computes totals.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201 expected', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});",
+                  "if (pm.response.code === 201 && pm.response.json().success === true) {",
+                  "  pm.environment.set(\"salesOrderId\", pm.response.json().data['sales_order']['id']);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_id\": \"{{customerId}}\",\n  \"items\": [\n    {\n      \"product_id\": \"{{productId}}\",\n      \"quantity\": 2,\n      \"discount_percent\": \"5.00\",\n      \"tax_percent\": \"8.00\",\n      \"unit_price\": \"0.01\",\n      \"line_total\": \"0.01\"\n    }\n  ],\n  \"grand_total\": \"0.01\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/sales-orders/"
+          }
+        },
+        {
+          "name": "Get sales order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/sales-orders/{{salesOrderId}}/"
+          }
+        },
+        {
+          "name": "Edit Draft sales order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    {\n      \"product_id\": \"{{productId}}\",\n      \"quantity\": 2,\n      \"discount_percent\": \"5.00\",\n      \"tax_percent\": \"8.00\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/sales-orders/{{salesOrderId}}/"
+          }
+        },
+        {
+          "name": "Confirm sales order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/sales-orders/{{salesOrderId}}/confirm/"
+          }
+        },
+        {
+          "name": "Fulfil and issue invoice",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set(\"idempotencyKey\", pm.variables.replaceIn(\"{{$guid}}\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});",
+                  "if (pm.response.code === 200 && pm.response.json().success === true) {",
+                  "  pm.environment.set(\"invoiceId\", pm.response.json().data['invoice']['id']);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/sales-orders/{{salesOrderId}}/fulfill/"
+          }
+        },
+        {
+          "name": "Cancel a separate Draft or Confirmed order",
+          "description": "Optional example: replace salesOrderToCancelId in this URL with a separate Draft or Confirmed order ID. A fulfilled order cannot be cancelled.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/sales-orders/{{salesOrderToCancelId}}/cancel/"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Payments and Invoices",
+      "item": [
+        {
+          "name": "Record payment",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set(\"idempotencyKey\", pm.variables.replaceIn(\"{{$guid}}\"));"
+                ]
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set(\"idempotencyKey\", pm.variables.replaceIn(\"{{$guid}}\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201 expected', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": \"10.00\",\n  \"method\": \"bank_transfer\",\n  \"reference\": \"POSTMAN-PAYMENT-001\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/sales-orders/{{salesOrderId}}/payments/"
+          }
+        },
+        {
+          "name": "Process return and create credit note",
+          "description": "Run after the sales order is fulfilled. Restocks one unit and records a credit note; it does not issue a refund.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201 expected', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    {\n      \"product_id\": \"{{productId}}\",\n      \"quantity\": 1\n    }\n  ],\n  \"reason\": \"Postman test return\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/sales-orders/{{salesOrderId}}/returns/"
+          }
+        },
+        {
+          "name": "List payments",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/payments/?page=1&page_size=20"
+          }
+        },
+        {
+          "name": "List invoices",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/invoices/?page=1&page_size=20"
+          }
+        },
+        {
+          "name": "Get invoice",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/invoices/{{invoiceId}}/"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reports",
+      "item": [
+        {
+          "name": "Dashboard",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/reports/dashboard/"
+          }
+        },
+        {
+          "name": "Sales report",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/reports/sales/?date_from=2026-01-01&date_to=2026-12-31&page=1&page_size=20"
+          }
+        },
+        {
+          "name": "Inventory report",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/reports/inventory/?page=1&page_size=20"
+          }
+        },
+        {
+          "name": "Low-stock report",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/reports/low-stock/?page=1&page_size=20"
+          }
+        },
+        {
+          "name": "Employees report",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/reports/employees/?date_from=2026-01-01&date_to=2026-12-31&page=1&page_size=20"
+          }
+        },
+        {
+          "name": "Departments report",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/reports/departments/?date_from=2026-01-01&date_to=2026-12-31&page=1&page_size=20"
+          }
+        },
+        {
+          "name": "Suppliers report",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/reports/suppliers/?date_from=2026-01-01&date_to=2026-12-31&page=1&page_size=20"
+          }
+        },
+        {
+          "name": "Purchases report",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/reports/purchases/?date_from=2026-01-01&date_to=2026-12-31&page=1&page_size=20"
+          }
+        },
+        {
+          "name": "Monthly sales report",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200 expected', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/reports/monthly-sales/?date_from=2026-01-01&date_to=2026-12-31&page=1&page_size=20"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Negative Tests",
+      "item": [
+        {
+          "name": "Missing bearer token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401 expected', function () {",
+                  "  pm.response.to.have.status(401);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(false);",
+                  "  pm.expect(payload.error).to.be.an('object');",
+                  "  pm.expect(payload.error).to.have.property('code');",
+                  "  pm.expect(payload.error).to.have.property('message');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/users/"
+          }
+        },
+        {
+          "name": "Invalid bearer token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401 expected', function () {",
+                  "  pm.response.to.have.status(401);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(false);",
+                  "  pm.expect(payload.error).to.be.an('object');",
+                  "  pm.expect(payload.error).to.have.property('code');",
+                  "  pm.expect(payload.error).to.have.property('message');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{invalidToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/users/"
+          }
+        },
+        {
+          "name": "Expired bearer token",
+          "description": "Generate expiredToken using backend/scripts/make_expired_token.py; see docs/testing.md.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401 expected', function () {",
+                  "  pm.response.to.have.status(401);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(false);",
+                  "  pm.expect(payload.error).to.be.an('object');",
+                  "  pm.expect(payload.error).to.have.property('code');",
+                  "  pm.expect(payload.error).to.have.property('message');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{expiredToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/users/"
+          }
+        },
+        {
+          "name": "Insufficient permissions - employee cannot list users",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 403 expected', function () {",
+                  "  pm.response.to.have.status(403);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(false);",
+                  "  pm.expect(payload.error).to.be.an('object');",
+                  "  pm.expect(payload.error).to.have.property('code');",
+                  "  pm.expect(payload.error).to.have.property('message');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{employeeAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/users/"
+          }
+        },
+        {
+          "name": "Invalid customer data",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set(\"invalidCustomerCode\", \"BAD-CUS-\" + pm.variables.replaceIn(\"{{$guid}}\").replace(/-/g, \"\").slice(0, 12).toUpperCase());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400 expected', function () {",
+                  "  pm.response.to.have.status(400);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(false);",
+                  "  pm.expect(payload.error).to.be.an('object');",
+                  "  pm.expect(payload.error).to.have.property('code');",
+                  "  pm.expect(payload.error).to.have.property('message');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"{{invalidCustomerCode}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/customers/"
+          }
+        },
+        {
+          "name": "Duplicate product SKU",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 409 expected', function () {",
+                  "  pm.response.to.have.status(409);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(false);",
+                  "  pm.expect(payload.error).to.be.an('object');",
+                  "  pm.expect(payload.error).to.have.property('code');",
+                  "  pm.expect(payload.error).to.have.property('message');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sku\": \"{{productSku}}\",\n  \"name\": \"Duplicate SKU\",\n  \"category\": \"Hardware\",\n  \"unit\": \"each\",\n  \"cost_price\": \"1.00\",\n  \"selling_price\": \"2.00\",\n  \"min_stock_level\": 0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/products/"
+          }
+        },
+        {
+          "name": "Invalid ObjectId",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400 expected', function () {",
+                  "  pm.response.to.have.status(400);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(false);",
+                  "  pm.expect(payload.error).to.be.an('object');",
+                  "  pm.expect(payload.error).to.have.property('code');",
+                  "  pm.expect(payload.error).to.have.property('message');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/products/not-an-object-id/"
+          }
+        },
+        {
+          "name": "Duplicate purchase receipt - over-receive",
+          "description": "Run only after the Receipts folder has fully received the same PO; the fresh key prevents an idempotency replay.",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set(\"idempotencyKey\", pm.variables.replaceIn(\"{{$guid}}\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 409 expected', function () {",
+                  "  pm.response.to.have.status(409);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(false);",
+                  "  pm.expect(payload.error).to.be.an('object');",
+                  "  pm.expect(payload.error).to.have.property('code');",
+                  "  pm.expect(payload.error).to.have.property('message');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    {\n      \"product_id\": \"{{productId}}\",\n      \"quantity_received\": 10\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/purchase-orders/{{purchaseOrderId}}/receive/"
+          }
+        },
+        {
+          "name": "Setup - create order that cannot be stocked",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201 expected', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(true);",
+                  "  pm.expect(payload.data).to.be.an('object');",
+                  "});",
+                  "if (pm.response.code === 201 && pm.response.json().success === true) {",
+                  "  pm.environment.set(\"oversellOrderId\", pm.response.json().data['sales_order']['id']);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_id\": \"{{customerId}}\",\n  \"items\": [\n    {\n      \"product_id\": \"{{productId}}\",\n      \"quantity\": 999999,\n      \"discount_percent\": \"0.00\",\n      \"tax_percent\": \"0.00\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/sales-orders/"
+          }
+        },
+        {
+          "name": "Insufficient inventory - confirm must fail",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 409 expected', function () {",
+                  "  pm.response.to.have.status(409);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(false);",
+                  "  pm.expect(payload.error).to.be.an('object');",
+                  "  pm.expect(payload.error).to.have.property('code');",
+                  "  pm.expect(payload.error).to.have.property('message');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/sales-orders/{{oversellOrderId}}/confirm/"
+          }
+        },
+        {
+          "name": "Invalid status transition - cancel fulfilled order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 409 expected', function () {",
+                  "  pm.response.to.have.status(409);",
+                  "});",
+                  "pm.test('Standard response envelope', function () {",
+                  "  const payload = pm.response.json();",
+                  "  pm.expect(payload.success).to.eql(false);",
+                  "  pm.expect(payload.error).to.be.an('object');",
+                  "  pm.expect(payload.error).to.have.property('code');",
+                  "  pm.expect(payload.error).to.have.property('message');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/sales-orders/{{salesOrderId}}/cancel/"
+          }
+        }
+      ],
+      "description": "These requests expect standard JSON error envelopes. Some examples require the earlier success requests or preconfigured IDs. Database-unavailable validation is intentionally a documented manual step, not a runnable request; see docs/testing.md."
+    }
+  ]
+}

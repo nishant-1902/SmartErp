@@ -1856,3 +1856,56 @@
 ### Next step
 
 - Wait for acceptance before starting another implementation step.
+
+## 2026-11-04 — Unified Postman collection
+
+### Files created
+
+- `docs/postman/SmartERP.postman_collection.json` — Postman v2.1 collection with 15 requested folders, 84 requests, status/envelope assertions, auth workflows, and negative cases.
+- `docs/postman/SmartERP.local.postman_environment.json` — Postman v2.1 local environment template with 33 variables and blank credential/token values.
+- `backend/scripts/make_expired_token.py` — local CLI utility that finds an active user by email or ObjectId and prints a signed, already-expired access token without modifying MongoDB.
+
+### Files modified
+
+- `docs/testing.md` — adds import, environment setup, collection workflow, Newman, expired-token, and manual database-unavailable instructions.
+- `docs/api-documentation.md` — points API documentation to the unified collection and environment.
+- `docs/PROGRESS.md` — records this implementation and validation results.
+
+### Dependencies installed
+
+- None. Existing Django, PyMongo, and PyJWT dependencies were reused; Postman/Newman was not installed.
+
+### Commands run and observed
+
+- Postman JSON/contract validation — `Postman v2.1 collection and environment JSON: PASS`; folder order, request URLs, headers, auth, example bodies, status/envelope assertions, login token storage, refresh cookie usage, and UUID scripts passed; `Requests validated: 84; environment variables: 33`.
+- `.\venv\Scripts\python.exe -m py_compile scripts\make_expired_token.py` from `backend\` — passed.
+- `.\venv\Scripts\python.exe scripts\make_expired_token.py --help` from `backend\` — printed the expected `--email` / `--user-id` usage and exited successfully.
+- `.\venv\Scripts\python.exe scripts\make_expired_token.py --user-id not-an-object-id` from `backend\` — printed `Invalid user identifier: Invalid ObjectId.` and exited with code `2`.
+- `.\venv\Scripts\python.exe -m pytest tests\accounts\test_tokens.py -q` from `backend\` — `5 passed in 0.07s`.
+- `.\venv\Scripts\python.exe manage.py check` from `backend\` — `System check identified no issues (0 silenced).`
+- `git diff --check` — passed with no output.
+
+### Features completed
+
+- Created an importable v2.1 collection organized into the requested Health, Auth, Users, Employees, Departments, Products, Stock, Suppliers, Purchase Orders, Receipts, Customers, Sales Orders, Payments and Invoices, Reports, and Negative Tests folders.
+- Added bearer auth variables, request headers and example bodies, and per-request tests for expected status and standard response envelopes.
+- Login stores the access JWT in the selected Postman environment; refresh relies on Postman's cookie jar and sends the required CSRF header.
+- Fulfilment, payment, stock adjustment, and receipt requests generate UUID idempotency keys through `pm.variables.replaceIn("{{$guid}}")`.
+- Added missing/invalid/expired token, permission, invalid input, duplicate identifier/receipt, invalid ObjectId, insufficient stock, and invalid state-transition examples. The database-unavailable check is a documented manual step, not a routine request.
+- Documented prerequisites and workflow execution. The expired-token utility signs for a selected active local user using the configured JWT settings; it does not persist the token or write database data.
+
+### Tests passed
+
+- Postman collection/environment structural and contract validation passed for all 84 requests.
+- Five focused access-token tests, expired-token script compilation, CLI help, invalid-ID handling, and Django system check passed.
+- Whitespace validation passed.
+
+### Known problems and not implemented yet
+
+- Postman/Newman requests were not sent to a running API; live execution requires local credentials, MongoDB, and related entity IDs. Write examples should use a disposable local database.
+- The Employee create request needs an existing active `departmentId`; optional reject/cancel requests need separate eligible purchase-order IDs.
+- Database-unavailable validation must only be performed manually on an isolated local database, as documented.
+
+### Next step
+
+- Wait for acceptance before starting another implementation step.
