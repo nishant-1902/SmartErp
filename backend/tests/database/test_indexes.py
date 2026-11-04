@@ -98,6 +98,9 @@ def test_workflow_documents_include_required_inventory_and_order_fields():
     sales_fields = set(
         COLLECTIONS["sales_orders"].validator["$jsonSchema"]["required"]
     )
+    sales_item_schema = COLLECTIONS["sales_orders"].validator["$jsonSchema"][
+        "properties"
+    ]["items"]["items"]
 
     assert {"quantity_ordered", "quantity_received"} <= purchase_item_fields
     assert "status_history" in purchase_fields
@@ -123,6 +126,11 @@ def test_workflow_documents_include_required_inventory_and_order_fields():
     )
     assert "min_stock_level" in product_fields
     assert {"quantity_change", "reserved_change", "performed_by"} <= movement_fields
+    assert {
+        "discount_percent",
+        "tax_percent",
+    } <= set(sales_item_schema["required"])
+    assert sales_item_schema["properties"]["tax_percent"]["maximum"] == 100
     movement_properties = COLLECTIONS["stock_movements"].validator["$jsonSchema"][
         "properties"
     ]

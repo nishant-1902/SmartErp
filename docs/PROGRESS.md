@@ -1511,3 +1511,69 @@
 ### Next step
 
 - Stop here for acceptance. After approval, configure/use the local MongoDB replica set and verify customer CRUD, permission denials, uniqueness, and sales-order history with Postman.
+
+## 2026-11-04 — Sales orders, part 1
+
+### Files created
+
+- `backend/sales/serializers.py` — strict validation for order create/update, item quantities and percentages, IDs, list filters, and ignored server-owned prices/totals.
+- `backend/sales/repository.py` — yearly SO number allocation, PyMongo sales-order CRUD/list operations, Decimal128 persistence, and conditional state updates.
+- `backend/sales/services.py` — server-side product/customer validation and pricing, per-line Decimal calculations, transactional confirmation/reservation, and cancellation/reservation release.
+- `backend/sales/urls.py` — sales-order collection, confirm, cancel, and detail routes.
+- `backend/tests/sales/test_sales_order_api.py` — sales API, totals/rounding, permissions, concurrency, reservations, cancellations, rollback, and transition tests.
+- `docs/postman/sales-orders.postman_collection.json` — Postman calls for listing, creating, editing, confirming, cancelling, and negative requests.
+
+### Files modified
+
+- `backend/sales/views.py` — replaced the placeholder with authenticated list/create/detail/update/confirm/cancel endpoints.
+- `backend/config/urls.py` — mounted `/api/sales-orders/`.
+- `backend/inventory/repository.py` — makes the reservation stock update conditional on `is_active: true` as well as available quantity.
+- `backend/database/indexes.py` — requires sales item discount/tax percentages and caps tax percentage at 100 in the MongoDB validator.
+- `backend/tests/accounts/fakes.py` — added unique sales-order number behavior to the in-memory Mongo fake.
+- `backend/tests/database/test_indexes.py` — verifies the sales-line percent schema.
+- `docs/requirements.md` — specifies sales fields, Decimal rounding, and reserved-at-confirm/deducted-at-fulfil stock timing.
+- `docs/database-design.md` — documents order calculation and stock reservation/deduction semantics.
+- `docs/api-documentation.md` — documents Sales part 1 endpoints, permissions, calculation rules, and state transitions.
+- `docs/PROGRESS.md` — records this implementation and verification.
+
+### Dependencies installed
+
+- None. Existing PyMongo transaction, BSON Decimal128, Django REST Framework, and common Decimal helpers were reused.
+
+### Commands run and observed
+
+- From `backend\`: `.\venv\Scripts\python.exe -m pytest -q` — `348 passed in 6.71s`.
+- From `backend\`: `.\venv\Scripts\python.exe manage.py check` — `System check identified no issues (0 silenced).`
+- From repository root: parsed `docs\postman\sales-orders.postman_collection.json` with Python — `Postman JSON: valid`.
+- `git diff --check` — passed; no whitespace errors.
+- Checked changed Python source for lines over 99 characters — none.
+- An initial focused sales test run found two incorrect expected rounding values; the expectations were corrected to match the shared `apply_discount` half-up rounding, then the complete backend suite passed.
+
+### Features completed
+
+- Added GET/POST `/api/sales-orders/`, GET/PATCH `/api/sales-orders/{id}/`, and POST `/confirm/` and `/cancel/` actions.
+- Added yearly `SO-YYYY-000001` counter allocation and Draft order status history.
+- Server requires active customers/products, snapshots identity, reads selling price from products, and ignores client prices and totals.
+- Calculates line subtotal, discounted line amount, tax on discounted amount, and line total using shared Decimal helpers and per-line `ROUND_HALF_UP`; stores monetary values and percentages as BSON Decimal128.
+- Confirm runs a snapshot/majority transaction, conditionally reserves only active-product available stock, records `reservation` movements, and updates Draft → Confirmed conditionally. Insufficient stock returns `409` with product details and rolls back all lines and order changes.
+- Draft cancellation has no stock effect. Confirmed cancellation transactionally reduces reserved quantity without changing on-hand stock, records `reservation_release` movements, and conditionally updates Confirmed → Cancelled.
+- Draft edits are restricted to Draft orders and recalculate values from server product prices; role permissions come from the backend role matrix.
+- Defined stock timing clearly in requirements: confirm reserves; fulfil deducts on-hand and releases reservation.
+
+### Tests passed
+
+- Complete backend suite: 348 passed.
+- Django system check: passed.
+- Postman collection JSON parse: passed.
+- `git diff --check`: passed.
+
+### Known problems and not implemented yet
+
+- Fulfilment is **not implemented in part 1**. The requirements define it as decreasing both on-hand and reserved quantities; part 1 exposes only create/read/update/confirm/cancel.
+- Payments, invoices, returns, audit writes for sales, and sales frontend pages are not implemented in this step.
+- Transaction/concurrency tests use the in-memory transactional fake. No live MongoDB replica-set test or Postman walkthrough was run; configure/initialize the replica set before live use.
+- Tax rate is supplied per item as `tax_percent` (defaults to zero), matching the existing sales collection schema.
+
+### Next step
+
+- Stop here for acceptance. After approval, implement and validate the next separately requested sales workflow step; do not begin it automatically.

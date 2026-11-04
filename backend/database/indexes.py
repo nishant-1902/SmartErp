@@ -516,7 +516,8 @@ COLLECTIONS: dict[str, CollectionDefinition] = {
                         "bsonType": "object",
                         "required": [
                             "product_id", "sku", "name", "quantity", "unit_price",
-                            "line_subtotal", "line_tax", "line_total",
+                            "discount_percent", "tax_percent", "line_subtotal",
+                            "line_tax", "line_total",
                         ],
                         "properties": {
                             "product_id": {"bsonType": "objectId"},
@@ -532,6 +533,7 @@ COLLECTIONS: dict[str, CollectionDefinition] = {
                             "tax_percent": {
                                 "bsonType": ["decimal", "int", "long"],
                                 "minimum": 0,
+                                "maximum": 100,
                             },
                             "line_subtotal": {"bsonType": "decimal", "minimum": 0},
                             "line_tax": {"bsonType": "decimal", "minimum": 0},

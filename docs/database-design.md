@@ -537,7 +537,7 @@ customer data even after the master record changes.
 | `order_number` | string | Yes | Unique human-readable order number |
 | `customer_id` | ObjectId | Yes | Existing active customer for new orders |
 | `customer_snapshot` | object | Yes | Historical customer identity/address |
-| `items` | array | Yes | Product ID and SKU/name snapshots, positive quantity, Decimal128 price, discount/tax percentages, and Decimal128 line subtotal/tax/total |
+| `items` | array | Yes | Product ID and SKU/name snapshots, positive quantity, server-derived Decimal128 unit price, discount/tax percentages, and Decimal128 line subtotal/tax/total |
 | `status` | string | Yes | `draft`, `confirmed`, `fulfilled`, or `cancelled` |
 | `return_status` | string | Yes | `none`, `partial`, or `full`; separate from order status |
 | `payment_status` | string | Yes | Server-computed `unpaid`, `partial`, or `paid` |
@@ -551,6 +551,20 @@ customer data even after the master record changes.
 
 **Indexes:** unique number; `(customer_id, created_at DESC)`; `(status,
 created_at DESC)`.
+
+**Calculation:** For each line, multiply quantity by the server-read product
+selling price for `line_subtotal`; apply the discount and round the discounted
+line amount to two places using `ROUND_HALF_UP`; apply tax to that discounted
+amount and round tax to two places; add discounted amount and tax for
+`line_total`. The order totals are sums of the per-line rounded amounts. Never
+use a client-supplied price or total.
+
+**Stock timing:** Confirm conditionally reserves quantity by incrementing
+`reserved_quantity` only when `is_active` is true and
+`quantity_on_hand - reserved_quantity >= quantity`; it does not change
+`quantity_on_hand`. Fulfilment deducts by reducing both on-hand and reserved
+quantities. Cancelling a confirmed order reduces only the reservation. Each
+operation and its stock movement are transactionally committed.
 
 **Relationships / embed vs reference:** References customer and product master
 records, embeds bounded line and customer snapshots for order detail and

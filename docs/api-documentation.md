@@ -93,6 +93,73 @@ Manager or Super Admin). Customer sales-order history requires `sales:read`
   `404`. The route is declared before the customer detail route.
 - **Status codes:** `200`, `400`, `401`, `403`, `404`.
 
+## Sales orders — part 1
+
+Sales-order list/detail reads require `sales:read`. Creating or editing a Draft
+order requires `sales:create`; Confirm requires `sales:confirm`; Cancel requires
+`sales:cancel`. The permission matrix grants management actions to Sales
+Managers and Super Admins; reads are role-limited by `sales:read`.
+
+### List and create sales orders
+
+- **Methods and URL:** `GET` and `POST /api/sales-orders/`.
+- **List filters:** `page` (default `1`), `page_size` (default `20`, maximum
+  `100`), `status` (`draft`, `confirmed`, `fulfilled`, or `cancelled`), and
+  `customer_id`.
+- **Create body:** `customer_id` and a non-empty `items` array. Each item takes
+  `product_id`, positive integer `quantity`, and optional decimal-string
+  `discount_percent` and `tax_percent` (each defaults to `"0"` and ranges from
+  `0` to `100`).
+- **Server-owned values:** The server requires an active customer and active
+  products, snapshots customer and product details, reads each product's
+  `selling_price`, allocates `SO-YYYY-000001` from the yearly MongoDB counter,
+  and calculates all prices/totals. Submitted `unit_price`, `sku`, `name`,
+  order number, and total fields are ignored.
+- **Calculation and money:** For each line, `line_subtotal = quantity ×
+  server unit price`; the discounted line amount is rounded to two decimal
+  places with `ROUND_HALF_UP`; tax is calculated on that discounted amount and
+  rounded to two places; `line_total = discounted amount + line_tax`. Order
+  subtotal, discount, tax, and grand total sum the rounded line values. Values
+  are calculated with the shared Decimal helpers and stored as Decimal128.
+- **Success response (`201`):** Standard envelope with `data.sales_order`.
+- **Status codes:** `201`, `400`, `401`, `403`.
+
+### Read and edit sales orders
+
+- **Methods and URL:** `GET` or `PATCH /api/sales-orders/{id}/`.
+- **Role:** Reads require `sales:read`; PATCH requires `sales:create`.
+- **PATCH:** Draft only; accepts `customer_id` and/or replacement `items`.
+  Recalculates server-owned prices and totals. Client price and total values
+  are ignored. Empty patches and edits after Draft return `400` and `409`
+  respectively.
+- **Success response (`200`):** Standard envelope with `data.sales_order`.
+- **Validation:** `{id}` must be an ObjectId. Missing orders return `404`.
+
+### Confirm and cancel
+
+- **URLs:** `POST /api/sales-orders/{id}/confirm/` and
+  `POST /api/sales-orders/{id}/cancel/`; both accept an empty JSON object.
+- **Permissions:** Confirm requires `sales:confirm`; Cancel requires
+  `sales:cancel`.
+- **Confirm:** Draft → Confirmed in one snapshot/majority MongoDB transaction.
+  For each line, a conditional product update requires an active product and
+  `quantity_on_hand - reserved_quantity >= quantity`, then increases
+  `reserved_quantity` and records a `reservation` stock movement. On-hand
+  quantity is unchanged. Insufficient stock returns `409 insufficient_stock`
+  with the product ID, SKU, name, requested quantity, and available quantity;
+  all order/stock/movement writes roll back.
+- **Cancel:** Draft → Cancelled has no stock effect. Confirmed → Cancelled
+  decrements each line's `reserved_quantity`, does not change on-hand, and
+  writes a `reservation_release` movement in the same transaction as the
+  conditional status transition.
+- **State rules:** Confirm only accepts Draft. Cancel accepts Draft or
+  Confirmed. Repeated or otherwise invalid transitions return `409` without
+  changing stock or history.
+- **Status codes:** `200`, `400`, `401`, `403`, `404`, `409`.
+- **Not in part 1:** Fulfilment (the later transition that deducts on-hand
+  stock while releasing reservation), payments, invoices, returns, and their
+  endpoints.
+
 ## Suppliers
 
 Supplier endpoints require a bearer access token. Supplier list and detail reads

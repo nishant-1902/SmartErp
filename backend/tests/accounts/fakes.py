@@ -275,6 +275,7 @@ class FakeDatabase:
             unique_fields = {
                 "idempotency_keys": (("scope", "key"),),
                 "purchase_orders": (("po_number",),),
+                "sales_orders": (("order_number",),),
                 "purchase_receipts": (
                     ("receipt_reference",),
                     ("purchase_order_id", "idempotency_key"),

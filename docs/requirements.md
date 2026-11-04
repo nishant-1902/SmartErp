@@ -69,10 +69,13 @@ The application is planned as a React (JavaScript) frontend and a Django REST Fr
 ### G. Sales, fulfilment, payments, invoices, and returns
 
 - Sales Managers and Super Admins can manage sales workflows; authorized users can read sales orders, invoices, and payments needed for their work.
-- A sales order snapshots product identity and server-derived unit prices. The server calculates line subtotals, discounts, tax on discounted amounts, and grand total using Decimal arithmetic and the agreed rounding rule; client prices and totals are ignored.
-- Confirming a sales order reserves inventory atomically; it does not reduce on-hand stock.
-- Fulfilling a confirmed order atomically decreases on-hand stock and releases the reservation, records stock movements, creates an invoice snapshot, and audits the operation.
-- Cancellation is allowed only from an allowed state. Cancelling a confirmed order releases its reservation through the stock service.
+- A sales order number is allocated from an atomic yearly counter in `SO-YYYY-000001` format. Orders snapshot customer identity/address and product SKU/name; unit prices are always loaded from the product by the server.
+- A sales order stores `order_number`, `customer_id`, `items[]`, `subtotal`, `discount_total`, `tax_total`, `grand_total`, status (`draft`, `confirmed`, `fulfilled`, `cancelled`), `return_status` (`none`, `partial`, `full`), `status_history`, `payment_status`, `created_at`, and `updated_at`. Each item stores `product_id`, SKU/name snapshots, quantity, server-derived `unit_price`, `discount_percent`, `tax_percent`, `line_subtotal`, `line_tax`, and `line_total`.
+- For each line, calculate `line_subtotal = quantity × server product selling price`; round the discounted line amount to two decimals using `ROUND_HALF_UP`; calculate tax on that rounded discounted amount and round tax to two decimals using `ROUND_HALF_UP`; then `line_total = discounted line amount + line_tax`. Order subtotal, discount total, tax total, and grand total are sums of the rounded line values. Money and percentages use Python `Decimal` and are stored as BSON `Decimal128`. Client-supplied prices and totals are ignored.
+- **Confirm reserves stock; it does not deduct stock.** The product update conditionally checks that the product is active and `available = quantity_on_hand - reserved_quantity` is at least the requested quantity. On success, increase `reserved_quantity` by the order quantity; leave `quantity_on_hand` unchanged. The reservation and `reservation` stock movement are committed in the same MongoDB transaction as Draft → Confirmed.
+- **Fulfil deducts stock.** When a confirmed order is fulfilled, decrease both `quantity_on_hand` and `reserved_quantity` by the fulfilled quantity; create stock movements, invoice snapshot, and audit record in one transaction. Thus reserved units are deducted from on-hand only at fulfilment, not at confirmation.
+- Draft cancellation has no stock effect. **Cancelling a Confirmed order releases its reservation:** decrease `reserved_quantity` by the order quantity, leave `quantity_on_hand` unchanged, write a `reservation_release` movement, and transition Confirmed → Cancelled in one transaction.
+- Only Draft → Confirmed and Draft/Confirmed → Cancelled are implemented in Sales part 1. Fulfilment and subsequent sales workflows are planned separately.
 - Fulfilment and other retryable critical writes require idempotency keys and are protected against duplicate processing.
 - Payments cannot exceed the order's outstanding amount. The server computes unpaid/partial/paid status.
 - Returns cannot exceed fulfilled quantities not already returned. Accepted returns restock through the stock service, record movements, update return status, and retain auditable credit-note data.
@@ -198,7 +201,7 @@ Each user has exactly one assigned role in the initial model. Additional roles, 
 11. **Error handling:** errors have stable codes/messages in the common envelope; internal exceptions and secrets remain server-side.
 12. **URL routing:** fixed paths (`me/`, `low-stock/`, `categories/`, `designations/`) precede parameterized `<id>/` routes.
 13. **Purchase separation of duties:** the PO creator cannot approve that PO unless the approver is Super Admin. This is recommended to reduce fraud/error risk by requiring a second person to approve commitments. The exception is explicit and auditable, not an accidental bypass. A business may choose stricter two-person approval that even excludes Super Admin; confirm the proposed exception below.
-14. **Sales stock timing:** stock is reserved when a Draft order is Confirmed, and on-hand stock is deducted only when that Confirmed order is Fulfilled. Cancelling a Confirmed order releases the reservation.
+14. **Sales stock timing:** **Confirm = reserve** (`reserved_quantity += quantity`; `available = quantity_on_hand - reserved_quantity`; on-hand is unchanged). **Fulfil = deduct** (`quantity_on_hand -= quantity` and `reserved_quantity -= quantity`). Cancelling a Confirmed order releases its reservation (`reserved_quantity -= quantity`; on-hand is unchanged). Each stock mutation and its stock-movement record are transactional.
 15. **Transaction deployment:** transactions require MongoDB replica-set capability. Critical multi-collection workflows fail safely rather than silently running non-transactionally.
 
 ## Purchase order status machine
@@ -224,10 +227,10 @@ Receipt processing is atomic: insert receipt, update stock through the stock ser
 | Current state | Action | Next state | Stock effect |
 |---|---|---|---|
 | Draft | Edit | Draft | No stock effect. |
-| Draft | Confirm | Confirmed | **Reserve stock now:** increase `reserved_quantity` conditionally only if available stock is sufficient. `quantity_on_hand` does not change. |
+| Draft | Confirm | Confirmed | **Reserve stock now:** for each active product, conditionally require `quantity_on_hand - reserved_quantity >= quantity`, then increase `reserved_quantity`; write a `reservation` movement. Do not change `quantity_on_hand`. All lines and the order transition commit atomically. |
 | Draft | Cancel | Cancelled | No stock effect. |
-| Confirmed | Fulfil | Fulfilled | **Deduct stock now:** decrease both `quantity_on_hand` and `reserved_quantity` by fulfilled quantity; create movements and invoice in one transaction. |
-| Confirmed | Cancel | Cancelled | Release the reservation by decreasing `reserved_quantity`; leave `quantity_on_hand` unchanged. |
+| Confirmed | Fulfil | Fulfilled | **Deduct stock now:** decrease both `quantity_on_hand` and `reserved_quantity` by fulfilled quantity; create movements and invoice in one transaction. (Fulfilment is not part 1.) |
+| Confirmed | Cancel | Cancelled | **Release the reservation:** decrease `reserved_quantity`; leave `quantity_on_hand` unchanged; write a `reservation_release` movement in the same transaction as the status transition. |
 | Fulfilled | Process partial return | Fulfilled | Restock accepted return quantity through the stock service; set return status to partial. |
 | Fulfilled | Process final return | Fulfilled | Restock returned quantities; set return status to full. |
 | Cancelled | Any transition | No transition | Terminal state; no stock effect. |
@@ -260,4 +263,4 @@ The owner confirmed the complete permission matrix and workflow proposal on 2026
 3. Both Sales Manager and Inventory Manager may fulfil sales.
 4. Sales follow Draft → Confirmed → Fulfilled; cancellation is allowed before fulfilment; returns are tracked separately.
 
-These are approved requirements for future implementation. **No permission or workflow policy in this document is implemented yet.**
+These are approved requirements. The backend implements customer read/write endpoints and Sales part 1 currently implements Draft sales-order CRUD plus Confirm/Cancel stock reservation workflows. Fulfilment, payments, invoices, returns, and remaining report workflows are not implemented yet.

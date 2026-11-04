@@ -298,6 +298,8 @@ def apply_stock_update(
     elif movement_type == "reservation_release":
         query["reserved_quantity"] = {"$gte": abs(reserved_delta)}
     else:
+        if movement_type == "reservation":
+            query["is_active"] = True
         available_required = max(0, -quantity_delta) + max(0, reserved_delta)
         if available_required:
             query["$expr"] = {
