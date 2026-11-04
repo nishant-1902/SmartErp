@@ -599,3 +599,58 @@ def test_conditional_po_line_update_rejects_stale_quantity(receipt_api):
     assert receipt_api["purchase_orders"].find_one({"_id": order_id})["items"][0][
         "quantity_received"
     ] == 4
+
+
+def test_purchase_lifecycle_and_inventory_movement_ledger_consistency(
+    client,
+    receipt_api,
+):
+    """Create, approve, and receive a PO once while keeping stock auditable."""
+    creator = insert_user(receipt_api)
+    approver = insert_user(receipt_api)
+    chair = insert_product(receipt_api, "Chair")
+    desk = insert_product(receipt_api, "Desk")
+    order_id, _ = create_approved_order(
+        client,
+        receipt_api,
+        creator,
+        approver,
+        [(chair, 4), (desk, 3)],
+    )
+    key = str(uuid4())
+
+    receipt = post_receipt(
+        client,
+        approver,
+        order_id,
+        [receipt_item(chair, 4), receipt_item(desk, 3)],
+        key,
+    )
+    replay = post_receipt(
+        client,
+        approver,
+        order_id,
+        [receipt_item(chair, 4), receipt_item(desk, 3)],
+        key,
+    )
+
+    assert receipt.status_code == 201
+    assert replay.status_code == 201
+    assert replay.json() == receipt.json()
+    order = receipt_api["purchase_orders"].find_one({"_id": order_id})
+    assert order["status"] == "received"
+    assert [line["quantity_received"] for line in order["items"]] == [4, 3]
+    assert receipt_api["purchase_receipts"].count_documents({}) == 1
+    assert receipt_api["stock_movements"].count_documents({}) == 2
+
+    for product in (chair, desk):
+        on_hand = receipt_api["products"].find_one({"_id": product["_id"]})[
+            "quantity_on_hand"
+        ]
+        ledger_total = sum(
+            movement["quantity_change"]
+            for movement in receipt_api["stock_movements"].find(
+                {"product_id": product["_id"]}
+            )
+        )
+        assert ledger_total == on_hand

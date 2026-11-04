@@ -56,6 +56,36 @@ afterEach(() => {
 })
 
 describe('SalesOrderForm', () => {
+  it('blocks submission when quantity exceeds available stock', async () => {
+    render(
+      <MemoryRouter>
+        <SalesOrderForm />
+      </MemoryRouter>,
+    )
+
+    fireEvent.change(await screen.findByLabelText('Customer'), {
+      target: { value: 'customer-1' },
+    })
+    fireEvent.change(screen.getByLabelText('Product'), {
+      target: { value: 'desk' },
+    })
+    fireEvent.change(
+      await screen.findByRole('combobox', {
+        name: 'Select product for line 1',
+      }),
+      { target: { value: 'product-1' } },
+    )
+    fireEvent.change(screen.getByLabelText('Quantity'), {
+      target: { value: '6' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Create draft' }))
+
+    expect(
+      await screen.findByText('Quantity exceeds currently available stock.'),
+    ).toBeInTheDocument()
+    expect(createSalesOrderMock).not.toHaveBeenCalled()
+  })
+
   it('shows available stock, previews totals, and submits no client prices or totals', async () => {
     render(
       <MemoryRouter>

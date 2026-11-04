@@ -14,6 +14,7 @@ from rest_framework.test import APIClient
 
 from accounts.tokens import create_access_token
 from common.time import utc_now
+from inventory.services import adjust_stock
 from tests.accounts.fakes import FakeDatabase
 
 
@@ -936,7 +937,15 @@ def test_return_restock_credit_note_and_return_limit(client, sales_api):
 def test_invoice_list_detail_and_full_sales_lifecycle(client, sales_api):
     user = insert_user(sales_api)
     customer = insert_customer(sales_api)
-    product = insert_product(sales_api, price="20.00", quantity=4)
+    product = insert_product(sales_api, price="20.00", quantity=0)
+    adjust_stock(
+        sales_api,
+        product_id=product["_id"],
+        quantity_change=4,
+        reason="Opening inventory for integration test",
+        user_id=user["_id"],
+        idempotency_key=str(uuid4()),
+    )
     created = create_order(
         client,
         user,
@@ -979,3 +988,11 @@ def test_invoice_list_detail_and_full_sales_lifecycle(client, sales_api):
     assert payment.json()["data"]["sales_order"]["payment_status"] == "paid"
     assert returned.status_code == 201
     assert returned.json()["data"]["sales_order"]["return_status"] == "partial"
+    stored_product = sales_api["products"].find_one({"_id": product["_id"]})
+    ledger_total = sum(
+        movement["quantity_change"]
+        for movement in sales_api["stock_movements"].find(
+            {"product_id": product["_id"]}
+        )
+    )
+    assert ledger_total == stored_product["quantity_on_hand"] == 3

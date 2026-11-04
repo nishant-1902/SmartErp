@@ -9,12 +9,13 @@ from django.core.exceptions import ImproperlyConfigured
 from rest_framework.test import APIClient
 
 from accounts.passwords import hash_password, verify_password
-from accounts.repository import count_users
+from accounts.repository import count_users, find_refresh_token_by_hash
 from accounts.services import (
     deactivate_managed_user,
+    hash_refresh_token,
     initiate_admin_password_reset,
 )
-from accounts.tokens import create_access_token
+from accounts.tokens import create_access_token, decode_access_token
 from common.exceptions import ConflictError
 from common.time import utc_now
 from tests.accounts.fakes import FakeDatabase
@@ -101,6 +102,45 @@ def test_non_admin_cannot_list_or_escalate_user_role(
     assert list_response.status_code == 403
     assert patch_response.status_code == 403
     assert management_api["users"].find_one({"_id": target["_id"]})["role"] == "employee"
+
+
+def test_login_verifies_password_and_issues_access_and_hashed_refresh_tokens(
+    client,
+    management_api,
+):
+    user = insert_user(management_api, "employee")
+
+    wrong_password = client.post(
+        "/api/auth/login/",
+        {"email": user["email"], "password": "WrongPassword887!"},
+        format="json",
+    )
+    login = client.post(
+        "/api/auth/login/",
+        {"email": user["email"], "password": "ExistingSafePass887!"},
+        format="json",
+        HTTP_USER_AGENT="pytest",
+    )
+
+    assert wrong_password.status_code == 401
+    assert wrong_password.json()["success"] is False
+    assert wrong_password.json()["error"]["code"] == "invalid_credentials"
+    assert "email" not in wrong_password.json()["error"]["details"]
+    assert login.status_code == 200
+    assert login.json()["success"] is True
+    access_token = login.json()["data"]["access_token"]
+    assert decode_access_token(access_token)["sub"] == str(user["_id"])
+
+    refresh_cookie = login.cookies[settings.REFRESH_COOKIE_NAME]
+    assert refresh_cookie["httponly"] is True
+    assert refresh_cookie.value
+    refresh_record = find_refresh_token_by_hash(
+        management_api,
+        hash_refresh_token(refresh_cookie.value),
+    )
+    assert refresh_record is not None
+    assert refresh_record["status"] == "active"
+    assert refresh_cookie.value not in refresh_record.values()
 
 
 def test_admin_can_create_search_and_read_user_without_hashes(

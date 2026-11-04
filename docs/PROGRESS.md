@@ -1909,3 +1909,58 @@
 ### Next step
 
 - Wait for acceptance before starting another implementation step.
+
+## 2026-11-04 — Backend and frontend test coverage
+
+### Files created
+
+- `backend/tests/accounts/test_auth_service_rules.py` — exercises login lockout, successful-login cleanup/audit, unknown-user reset requests, and invalid/expired/mismatched password-reset tokens.
+- `frontend/src/components/ProtectedRoute.test.jsx` — covers loading, guest redirect, authenticated rendering, and role denial.
+
+### Files modified
+
+- `backend/tests/accounts/fakes.py` — makes fake upserts return the inserted ID, matching PyMongo behavior needed by account-service tests.
+- `backend/tests/accounts/test_tokens.py` — adds JWT issuer, type, subject, token-version, and required-claim validation cases.
+- `backend/tests/accounts/test_user_management.py` — verifies bad and good login credentials, access-token claims, and the HttpOnly refresh cookie's hashed-at-rest record.
+- `backend/tests/purchases/test_purchase_receipt_api.py` — adds a create/submit/approve/receive API lifecycle with idempotent replay and movement-to-on-hand checks.
+- `backend/tests/sales/test_sales_order_api.py` — checks movement-ledger consistency across the full sales lifecycle.
+- `frontend/src/services/apiClient.test.js` — verifies a retried request uses the refreshed bearer token.
+- `frontend/src/pages/SalesOrderForm.test.jsx` — verifies orders above available stock cannot be submitted.
+- `docs/testing.md` — documents frontend install/test/lint/build commands, maps tests to business rules, and distinguishes fake-backed tests from live MongoDB integration tests.
+- `docs/PROGRESS.md` — records this coverage work and its observed results.
+
+### Dependencies installed
+
+- None. Existing pytest/pytest-cov and Vitest/Testing Library packages were used.
+
+### Commands run and observed
+
+- From `backend\`: `.\venv\Scripts\python.exe -m pytest tests\accounts\test_user_management.py::test_login_verifies_password_and_issues_access_and_hashed_refresh_tokens -q` — `1 passed in 0.99s`.
+- From `backend\`: `.\venv\Scripts\python.exe -m pytest --cov=. --cov-report=term-missing` — `374 passed in 38.86s`; total coverage `92%` (`8534` statements, `643` missed). Every business `services.py` module and `common/permissions.py` is at least 80%: accounts 86%, customers 86%, departments 92%, employees 91%, inventory 84%, purchases 91%, reports 99%, sales 90%, suppliers 92%, permissions 96%.
+- From `frontend\`: `npm test` — `Test Files 41 passed (41); Tests 116 passed (116)`. Vitest printed a jsdom environment performance notice; no tests failed.
+- From `frontend\`: `npm run lint` — completed with exit code 0 and no diagnostics.
+- A prior full frontend build in this testing step was not run; build instructions are documented in `docs/testing.md`.
+- Live MongoDB replica-set tests were not run. Current standard backend tests use in-memory PyMongo-shaped fakes, including a transaction fake.
+
+### Features completed
+
+- Expanded tests for authentication/password handling, token validation, the approved role matrix, employee/department/product validation, duplicate SKUs, stock adjustment and reservations, purchase approval/receipts, sales fulfilment/payments/returns, idempotency, ledger consistency, and API error/success response codes.
+- Added purchase and sales lifecycle API tests and frontend coverage for `ProtectedRoute`, the Axios refresh retry, and sales form stock validation.
+- Achieved the requested 80% minimum for each business service module and permissions module.
+
+### Tests passed
+
+- Backend: 374 passed; 92% total coverage.
+- Frontend: 116 passed across 41 test files.
+- Frontend lint: passed.
+- Focused login/API test: passed.
+
+### Known problems and not implemented yet
+
+- Concurrency and transaction tests use an in-memory fake. They do not prove MongoDB replica-set transaction isolation, write-conflict behavior, or live unique-index behavior. Run real replica-set integration tests before release.
+- Coverage is not 100%; for example, `accounts/views.py` is 67%, `common/idempotency.py` is 77%, and the superuser management command is 71%. Some branches are configuration/command paths rather than uncovered requested business rules.
+- The frontend production build was not rerun as part of this test-coverage step.
+
+### Next step
+
+- Wait for acceptance; before release, run the MongoDB-backed integration suite against a dedicated replica-set test database and run the frontend production build.

@@ -1,8 +1,11 @@
-# Backend testing
+# Backend and frontend testing
 
-The backend tests use `pytest`. Unit tests can run without MongoDB. Tests that
-request the `mongo_db` fixture use the real local MongoDB replica set; do not
-replace it with mongomock because mongomock does not support transactions.
+The backend tests use `pytest`; the frontend tests use Vitest and React Testing
+Library. The current backend suite uses in-memory PyMongo-shaped fakes, so it
+can run without MongoDB. The `mongo_db` fixture is available for tests that
+explicitly request a real local replica set; the current standard suite does
+not exercise that fixture. Do not replace replica-set integration tests with
+mongomock because mongomock does not support transactions.
 
 ## Configure MongoDB integration tests
 
@@ -43,8 +46,9 @@ python -m pytest --cov=. --cov-report=term-missing
 ```
 
 Add `-m slow_transaction` to run only tests marked as slower transaction
-tests, or `-m "not slow_transaction"` to skip those tests. Mark transaction
-tests with `@pytest.mark.slow_transaction`; they must use the real replica set.
+tests, or `-m "not slow_transaction"` to skip those tests. Tests that validate
+actual MongoDB transaction and write-conflict behavior must use the real
+replica-set fixture and should be marked `@pytest.mark.slow_transaction`.
 
 ## Shared fixtures
 
@@ -79,6 +83,54 @@ Read a pytest traceback from the bottom upward:
 
 Run the named test alone with its node ID after fixing the cause, then rerun the
 full suite.
+
+## Frontend tests
+
+From `frontend\`, install the locked dependencies if needed and run the test,
+lint, or production-build checks:
+
+```powershell
+npm ci
+npm test
+npm run lint
+npm run build
+```
+
+`npm test` runs Vitest once, including the route-guard, Axios refresh-interceptor,
+and form tests. `npm run lint` checks JavaScript/JSX with Oxlint. `npm run build`
+checks that Vite can produce the production bundle. When a frontend test fails,
+use the Vitest test name and rendered DOM/assertion output to locate the failing
+behavior; rerun a focused test with:
+
+```powershell
+npx vitest run src\components\ProtectedRoute.test.jsx
+```
+
+## Business-rule coverage review
+
+The coverage run is paired with the requirements in `docs/requirements.md`.
+Focused tests cover password verification and login token issuance, JWT claim
+validation, the role matrix, employee/department/product validation, duplicate
+SKU rejection, stock adjustments and reservation rules, purchase approval and
+receipt processing, sales fulfilment/payments/returns, lifecycle idempotency,
+response codes, and the stock-movement ledger invariant. Purchase and sales
+lifecycle tests exercise their API workflows using the transactional in-memory
+fake.
+
+Coverage is not proof of production MongoDB concurrency behavior. In
+particular, the fake serializes concurrent operations, so the parallel
+last-unit confirmation and duplicate-approval tests validate application
+conditional-update handling but do not validate MongoDB replica-set write
+conflicts or transaction isolation. The current standard pytest run also does
+not execute against the real `mongo_db` fixture. Run real replica-set tests
+before release to verify transactional atomicity, unique indexes, and database
+concurrency. Do not report those properties as live-database verified based
+only on the fake-backed tests.
+
+The reported aggregate coverage includes Django setup and command modules that
+are not expected to reach 80%. The task target is each business service module
+and `common/permissions.py`; inspect each row in the coverage table rather than
+treating the aggregate percentage as the only quality measure.
 
 ## Run the Postman API collection
 

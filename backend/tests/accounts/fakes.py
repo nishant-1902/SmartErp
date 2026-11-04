@@ -91,8 +91,11 @@ class FakeCollection:
                     if not key.startswith("$") and not isinstance(value, dict)
                 }
                 self._apply(document, update)
-                self.insert_one(document)
-                return SimpleNamespace(matched_count=0, upserted_id=document["_id"])
+                result = self.insert_one(document)
+                return SimpleNamespace(
+                    matched_count=0,
+                    upserted_id=result.inserted_id,
+                )
             return SimpleNamespace(matched_count=0, modified_count=0)
 
     def find_one_and_update(

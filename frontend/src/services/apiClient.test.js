@@ -75,6 +75,40 @@ describe('apiClient authentication', () => {
     expect(failureHandler).not.toHaveBeenCalled()
   })
 
+  it('retries the original request with the refreshed bearer token', async () => {
+    const requestTokens = []
+    let refreshCalls = 0
+    apiClient.defaults.adapter = async (config) => {
+      if (config.url.includes('/auth/refresh/')) {
+        refreshCalls += 1
+        return {
+          status: 200,
+          data: { success: true, data: { access_token: 'fresh-token' } },
+          headers: {},
+          config,
+        }
+      }
+
+      requestTokens.push(config.headers.get('Authorization'))
+      if (config.headers.get('Authorization') === 'Bearer expired-token') {
+        const error = new Error('Unauthorized')
+        error.config = config
+        error.response = { status: 401, config, data: {} }
+        throw error
+      }
+      return { status: 200, data: { ok: true }, headers: {}, config }
+    }
+    setAccessToken('expired-token')
+
+    await expect(apiClient.get('/employees/')).resolves.toMatchObject({
+      data: { ok: true },
+    })
+
+    expect(requestTokens).toEqual(['Bearer expired-token', 'Bearer fresh-token'])
+    expect(refreshCalls).toBe(1)
+    expect(getAccessToken()).toBe('fresh-token')
+  })
+
   it.each(['/auth/login/', '/auth/refresh/'])(
     'does not try to refresh after a 401 from %s',
     async (url) => {

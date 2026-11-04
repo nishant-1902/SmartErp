@@ -99,6 +99,34 @@ def test_wrong_audience_is_rejected():
         decode_access_token(token)
 
 
+@pytest.mark.parametrize(
+    ("overrides", "error"),
+    [
+        ({"iss": "another-api"}, jwt.InvalidIssuerError),
+        ({"type": "refresh"}, jwt.InvalidTokenError),
+        ({"sub": "not-an-object-id"}, jwt.InvalidTokenError),
+        ({"token_version": True}, jwt.InvalidTokenError),
+    ],
+)
+def test_invalid_issuer_type_subject_and_token_version_are_rejected(
+    overrides,
+    error,
+):
+    token = jwt.encode(make_payload(**overrides), JWT_SECRET, algorithm="HS256")
+
+    with pytest.raises(error):
+        decode_access_token(token)
+
+
+def test_missing_required_access_token_claim_is_rejected():
+    payload = make_payload()
+    payload.pop("jti")
+    token = jwt.encode(payload, JWT_SECRET, algorithm="HS256")
+
+    with pytest.raises(jwt.MissingRequiredClaimError):
+        decode_access_token(token)
+
+
 def test_none_algorithm_is_rejected():
     token = jwt.encode(make_payload(), key="", algorithm="none")
 
