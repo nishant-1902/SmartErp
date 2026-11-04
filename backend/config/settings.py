@@ -32,7 +32,7 @@ def _env_csv(name: str, default: str = "") -> list[str]:
 
 SECRET_KEY = os.getenv("SECRET_KEY", "")
 DEBUG = _env_bool("DEBUG")
-ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
+ALLOWED_HOSTS = _env_csv("ALLOWED_HOSTS", "localhost,127.0.0.1")
 
 MONGO_URI = os.getenv("MONGO_URI", "")
 MONGO_DB_NAME = os.getenv("MONGO_DB_NAME", "smarterp")

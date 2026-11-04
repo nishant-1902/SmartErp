@@ -854,9 +854,11 @@ embedding attacker-controlled IP arrays on user documents.
 | `response` | object or null | No | Stored bounded response for same-key/same-body replay |
 | `created_at`, `expires_at` | date | Yes | UTC creation and retention dates |
 
-**Unique constraints:** compound `(scope, key)`.
+**Unique constraints:** compound `(key, scope)`.
 
-**Indexes:** unique `(scope, key)`; TTL on `expires_at`. Stock adjustment
+**Indexes:** unique `(key, scope)`; TTL on `expires_at`. Both key fields are
+queried together for operation replay, and the declared order matches the
+existing application index. Stock adjustment
 records are retained for 24 hours for request replay.
 
 **Relationships / embed vs reference:** The bounded response is stored with its

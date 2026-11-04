@@ -882,7 +882,7 @@ COLLECTIONS: dict[str, CollectionDefinition] = {
             },
         ),
         indexes=(
-            _index("uq_idempotency_scope_key", ("scope", 1), ("key", 1), unique=True),
+            _index("uq_idempotency_scope_key", ("key", 1), ("scope", 1), unique=True),
             _index("ttl_idempotency_expiry", ("expires_at", 1), ttl=0),
         ),
     ),

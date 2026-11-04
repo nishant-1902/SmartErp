@@ -798,9 +798,10 @@ maximum `100`) and return standard pagination metadata.
   `data.categories`, an array of category strings.
 - **Status codes:** `200`, `400`, `401`, `403`.
 
-**Order integration:** New-order services must reject inactive product
-references. The product service exposes a tested active-product guard, but
-sales and purchase order endpoints are not implemented yet in this checkout.
+**Order integration:** Sales and purchase-order creation services reject
+inactive product references. Both order APIs are implemented; their request
+routes and status transitions are documented in the sales and purchase
+sections above.
 
 ## Stock
 

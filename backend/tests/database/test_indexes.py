@@ -47,7 +47,7 @@ def test_required_unique_indexes_are_defined():
         ("sales_returns", ("credit_note_number",)),
         ("purchase_receipts", ("receipt_reference",)),
         ("purchase_receipts", ("purchase_order_id", "idempotency_key")),
-        ("idempotency_keys", ("scope", "key")),
+        ("idempotency_keys", ("key", "scope")),
     }
     defined = {
         (collection_name, tuple(field for field, _ in index.keys))

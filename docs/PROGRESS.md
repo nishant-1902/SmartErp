@@ -1964,3 +1964,69 @@
 ### Next step
 
 - Wait for acceptance; before release, run the MongoDB-backed integration suite against a dedicated replica-set test database and run the frontend production build.
+
+## 2026-11-04 — Ten-phase project verification
+
+### Files created
+
+- `backend/tests/test_settings.py` — starts a clean Django settings process and verifies that comma-separated `ALLOWED_HOSTS` values are read from the environment.
+- `docs/FINAL_PROJECT_VERIFICATION_REPORT.md` — records the ten phase results, bugs fixed, command outputs, database/API evidence, and remaining verification limitations.
+
+### Files modified
+
+- `backend/config/settings.py` — reads `ALLOWED_HOSTS` using the existing CSV environment helper instead of hard-coding local hosts.
+- `backend/database/indexes.py` — aligns the unique idempotency index key order with the existing MongoDB index.
+- `backend/tests/database/test_indexes.py` — asserts the idempotency compound index field order.
+- `docs/database-design.md` — documents the declared `(key, scope)` index order.
+- `docs/api-documentation.md` — removes a stale statement that sales and purchase APIs are not implemented.
+- `README.md` — replaces the obsolete Phase 1 status with current setup, run, test, and verification guidance.
+- `docs/PROGRESS.md` — records this audit and its evidence.
+
+### Dependencies installed
+
+- None.
+
+### Commands run and observed
+
+- From `backend\`: `.\venv\Scripts\python.exe manage.py check` — `System check identified no issues (0 silenced).`
+- From `backend\`: `.\venv\Scripts\python.exe -m pytest -v` — `375 passed in 10.73s`.
+- From `backend\`: `.\venv\Scripts\python.exe -m pytest --cov=. --cov-report=term-missing` — `375 passed in 12.23s`; `TOTAL 8545 statements, 643 missed, 92%`. Every business service module and `common/permissions.py` is at least 80% covered.
+- From `backend\`: `.\venv\Scripts\python.exe -m pytest tests\database\test_init_db.py tests\database\test_indexes.py tests\test_settings.py -v` — `14 passed in 0.66s`.
+- From `backend\`: a MongoDB admin ping through the configured application URI returned `MongoDB ping: 1.0`.
+- From `backend\`: the first `manage.py init_db` run found the live `uq_idempotency_scope_key` index used `(key, scope)` while source expected `(scope, key)` and failed. Inspected index metadata without changing documents, aligned the source declaration/test/docs with the existing unique index, then reran `.\venv\Scripts\python.exe manage.py init_db` — `MongoDB initialization complete.` The initializer added/updated schema and indexes; it did not delete documents or collections.
+- From `backend\`: nine read-only report aggregations executed successfully against the configured MongoDB database. Queried sales, low-stock, monthly, purchase, and recent-transaction lists returned zero report rows; this does not prove that every collection is empty.
+- From `frontend\`: `npm test` — `Test Files 41 passed (41); Tests 116 passed (116)`. Vitest emitted a jsdom performance notice without test failures.
+- From `frontend\`: `npm run lint` — exit code 0, no diagnostics.
+- From `frontend\`: `npm run build` — `980 modules transformed`; build completed in `1.17s`.
+- Started Django and Vite locally. HTTP smoke check returned frontend `200`, API health `200` with the success envelope, and `Access-Control-Allow-Origin: http://localhost:5173`. Both temporary servers were stopped after verification.
+- Postman v2.1 structural validation — 15 folders in expected order, 84 requests using `{{baseUrl}}`, and 33 environment variables. A first validator incorrectly assumed each URL was an object; reran it accounting for string URLs and validation passed.
+- `git ls-files -- backend/.env frontend/.env` — no tracked local environment files.
+- Final `git diff --check` — passed with no output; no listeners remain on the temporary development ports 8000 and 5173.
+
+### Features completed
+
+- Audited the ten requested phases against the project brief, requirements, source structure, and automated tests; phase-by-phase evidence and limitations are in `docs/FINAL_PROJECT_VERIFICATION_REPORT.md`.
+- Fixed the `ALLOWED_HOSTS` environment wiring and the idempotency-index order mismatch encountered against the actual MongoDB database.
+- Verified backend system checks, all backend tests and coverage, frontend tests/lint/build, database initializer, MongoDB connectivity, report pipeline execution, local HTTP/CORS, and Postman collection structure.
+
+### Tests passed
+
+- Backend: 375 passed; 92% overall coverage; all business services and permissions at least 80%.
+- Focused configuration/index/initializer tests: 14 passed.
+- Frontend: 116 passed across 41 test files.
+- Frontend lint and production build: passed.
+- Local frontend/API HTTP+CORS smoke check: passed.
+- MongoDB ping and repeatable collection/index initialization: passed after index-definition alignment.
+
+### Known problems and not implemented yet
+
+- `MONGO_TEST_URI` is not configured, and no standard test currently uses the destructive-cleanup `mongo_db` fixture. Live replica-set transactions, write-conflict behavior, and live stock workflows remain unverified; configure a dedicated disposable test database before running such tests.
+- Postman requests were structurally validated but not executed against the API because the tracked local environment has blank credentials and IDs.
+- The configured MongoDB returned no reportable data in the queried report collections. Seeded report tests cover non-empty calculations.
+- A tracked unused starter scaffold remains in `backend/frontend/`; the canonical application is `frontend/`. It was not deleted during the audit.
+- `docs/deployment.md`, `docs/maintenance.md`, and `docs/user-manual.md` remain TODO placeholders from later project documentation/deployment phases outside the ten-phase audit.
+- Native invoice PDF generation is not implemented; browser printing is available.
+
+### Next step
+
+- Before release, provision a dedicated empty MongoDB replica-set test database and execute/add real-database transactional integration tests. Then run the credentialed Postman workflow with disposable local data. Suggested commit: `fix: verify SmartERP phases and align MongoDB indexes`.
