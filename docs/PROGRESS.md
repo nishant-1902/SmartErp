@@ -1453,3 +1453,61 @@
 ### Next step
 
 - Run a live authenticated walkthrough of supplier management, PO creation/approval, and receiving against the configured application; separately verify receipt transactions against a replica set. Stop until this step is accepted.
+
+## 2026-11-04 — Customer API
+
+### Files created
+
+- `backend/customers/serializers.py` — strict customer create/update, address, list-filter, and sales-order-history validation.
+- `backend/customers/repository.py` — PyMongo customer CRUD/list queries, escaped search, allowlisted sorting, Decimal128 persistence, and customer sales-order history queries.
+- `backend/customers/services.py` — customer uniqueness checks, safe not-found/conflict behavior, pagination, and JSON-safe response conversion.
+- `backend/customers/urls.py` — customer collection, sales-order-history, and detail routes; the fixed history route comes before the ObjectId detail route.
+- `backend/tests/customers/test_customer_api.py` — customer validation, permissions, search/filter/pagination, Decimal128, PATCH, unique identifiers, and sales-order-history coverage.
+- `docs/postman/customers.postman_collection.json` — customer success and negative API requests.
+
+### Files modified
+
+- `backend/customers/views.py` — replaced the placeholder with authenticated list/create/detail/update and sales-order-history endpoints.
+- `backend/config/urls.py` — mounted `/api/customers/`.
+- `docs/api-documentation.md` — documented customer fields, endpoints, permissions, validation, and response behavior.
+- `docs/PROGRESS.md` — recorded this implementation and verification.
+
+### Dependencies installed
+
+- None. Existing Django REST Framework, PyMongo, and BSON Decimal128 support were reused.
+
+### Commands run and observed
+
+- From `backend\`: `.\venv\Scripts\python.exe -m pytest tests\customers\test_customer_api.py -q` — `27 passed in 0.39s`.
+- From `backend\`: `.\venv\Scripts\python.exe -m pytest -q` — `324 passed in 6.38s` on the final implementation.
+- From `backend\`: `.\venv\Scripts\python.exe manage.py check` — `System check identified no issues (0 silenced).`
+- From the repository root: parsed `docs\postman\customers.postman_collection.json` with Python — `Postman JSON: valid`.
+- `git diff --check` — exited `0`; no whitespace errors.
+- Checked new backend/test source line lengths — no lines over 99 characters.
+
+### Features completed
+
+- Added customer fields for unique normalized code, name, optional email/phone/addresses/tax ID/credit limit, status, and UTC timestamps. Credit limits use Python Decimal and BSON Decimal128; JSON floats are rejected.
+- Added authenticated `GET`/`POST /api/customers/`, `GET`/`PATCH /api/customers/{id}/`, and paginated `GET /api/customers/{id}/sales-orders/`.
+- Added escaped case-insensitive customer search, active/inactive status filtering, allowlisted sorting, bounded pagination, and sales-order status filtering.
+- Enforced `customers:read` and `customers:write` through the permission matrix; Sales Managers and Super Admins can read and write. Sales-order history requires `sales:read`.
+- Reused the customer collection validator and unique code/tax-ID indexes already defined in `backend/database/indexes.py`.
+- Added API documentation and a Postman collection.
+
+### Tests passed
+
+- Customer API tests: 27 passed.
+- Complete backend suite: 324 passed.
+- Django system check: passed.
+- Postman collection JSON parse: passed.
+- `git diff --check`: passed.
+
+### Known problems and not implemented yet
+
+- No customer frontend pages were requested or added.
+- Sales-order creation/workflow endpoints are outside this backend step. The customer history endpoint reads existing `sales_orders` documents and returns an empty list when there are no matching orders.
+- The API tests use the in-memory MongoDB fake; a live MongoDB replica-set/Postman walkthrough was not performed. Initialize the already-declared MongoDB collections/indexes with `manage.py init_db` before using a new database.
+
+### Next step
+
+- Stop here for acceptance. After approval, configure/use the local MongoDB replica set and verify customer CRUD, permission denials, uniqueness, and sales-order history with Postman.

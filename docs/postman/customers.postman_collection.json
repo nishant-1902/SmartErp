@@ -1,0 +1,171 @@
+{
+  "info": {
+    "_postman_id": "bc455e21-8732-4e75-87da-b4b985a3a9c5",
+    "name": "SmartERP Customers",
+    "description": "Customer API success and negative requests. Set base_url and access_token collection variables first.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000/api"
+    },
+    {
+      "key": "access_token",
+      "value": ""
+    },
+    {
+      "key": "employee_access_token",
+      "value": ""
+    },
+    {
+      "key": "customer_id",
+      "value": ""
+    },
+    {
+      "key": "created_customer_code",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Success - List and search customers",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/customers/?page=1&page_size=20&search=Acme&status=active&sort_by=name&sort_order=asc"
+      }
+    },
+    {
+      "name": "Success - Create customer",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (pm.response.code === 201) {",
+              "  const customer = pm.response.json().data.customer;",
+              "  pm.collectionVariables.set('customer_id', customer.id);",
+              "  pm.collectionVariables.set('created_customer_code', customer.code);",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"code\": \"CUS-POSTMAN-001\",\n  \"name\": \"Postman Acme Stores\",\n  \"email\": \"accounts@example.com\",\n  \"phone\": \"+1 (415) 555-0123\",\n  \"billing_address\": {\n    \"line1\": \"10 Main Street\",\n    \"city\": \"Austin\",\n    \"region\": \"Texas\",\n    \"postal_code\": \"78701\",\n    \"country\": \"US\"\n  },\n  \"shipping_address\": null,\n  \"tax_id\": \"TAX-POSTMAN-001\",\n  \"status\": \"active\",\n  \"credit_limit\": \"2500.00\"\n}"
+        },
+        "url": "{{base_url}}/customers/"
+      }
+    },
+    {
+      "name": "Success - Get customer",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/customers/{{customer_id}}/"
+      }
+    },
+    {
+      "name": "Success - Patch customer",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"inactive\",\n  \"credit_limit\": \"3000.00\"\n}"
+        },
+        "url": "{{base_url}}/customers/{{customer_id}}/"
+      }
+    },
+    {
+      "name": "Success - Customer sales-order history",
+      "description": "Requires sales:read (Sales Manager or Super Admin).",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/customers/{{customer_id}}/sales-orders/?page=1&page_size=20&status=confirmed"
+      }
+    },
+    {
+      "name": "Negative - Duplicate customer code",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"code\": \"{{created_customer_code}}\",\n  \"name\": \"Duplicate Customer\"\n}"
+        },
+        "url": "{{base_url}}/customers/"
+      }
+    },
+    {
+      "name": "Negative - Invalid customer ObjectId",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/customers/not-an-object-id/"
+      }
+    },
+    {
+      "name": "Negative - Employee cannot write",
+      "request": {
+        "method": "POST",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{employee_access_token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"code\": \"CUS-FORBIDDEN\",\n  \"name\": \"Forbidden Customer\"\n}"
+        },
+        "url": "{{base_url}}/customers/"
+      }
+    },
+    {
+      "name": "Negative - Invalid list filter",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/customers/?status=unknown"
+      }
+    }
+  ]
+}

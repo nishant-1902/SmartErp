@@ -7,6 +7,92 @@ success/error envelopes. Department list endpoints use `page` (default `1`) and
 `page_size` (default `20`, maximum `100`). Search is a literal, case-insensitive
 substring search. Sort fields are explicitly allowlisted.
 
+## Customers
+
+Customer endpoints require a bearer access token. Customer list and detail reads
+require `customers:read`; create and update require `customers:write` (Sales
+Manager or Super Admin). Customer sales-order history requires `sales:read`
+(Sales Manager or Super Admin).
+
+### List customers
+
+- **Method and URL:** `GET /api/customers/`.
+- **Purpose:** Return a paginated, searchable customer list.
+- **Query parameters:** `page` (default `1`), `page_size` (default `20`,
+  maximum `100`), `search`, `status` (`active` or `inactive`), `sort_by`
+  (`code`, `name`, `email`, `phone`, `status`, `created_at`, or `updated_at`),
+  and `sort_order` (`asc` or `desc`).
+- **Search:** Literal, case-insensitive match against code, name, email, phone,
+  or tax ID. Search text is escaped before it is used in MongoDB.
+- **Success response (`200`):** Standard envelope with `data.customers` and
+  pagination metadata.
+- **Validation:** Unknown/unsafe query keys, invalid status values, and
+  unsupported sort fields return `400`.
+
+### Create customer
+
+- **Method and URL:** `POST /api/customers/`.
+- **Role:** Sales Manager or Super Admin (`customers:write`).
+- **Request body:**
+
+  ```json
+  {
+    "code": "CUS-001",
+    "name": "Acme Stores",
+    "email": "ap@acme.example",
+    "phone": "+1 (555) 123-1111",
+    "billing_address": {
+      "line1": "10 Main Street",
+      "city": "Austin",
+      "postal_code": "78701",
+      "country": "US"
+    },
+    "shipping_address": null,
+    "tax_id": "TAX-12345",
+    "status": "active",
+    "credit_limit": "5000.00"
+  }
+  ```
+
+- **Fields:** `code` and `name` are required. Email, phone, billing/shipping
+  addresses, tax ID, and credit limit may be omitted or null; status defaults to
+  `active`. Addresses require `line1`, `city`, and `country`; other address
+  fields are optional.
+- **Validation:** Code is trimmed, uppercased, and unique. Tax IDs are trimmed,
+  uppercased, and unique when present. Email is normalized to lowercase. Phone
+  accepts 7–15 digits with an optional leading `+` and common separators.
+  Credit limits are non-negative decimal amounts with at most two fractional
+  digits and must be sent as decimal strings, not JSON floating-point numbers.
+  Unknown/unsafe fields are rejected.
+- **Success response (`201`):** Standard envelope with `data.customer`.
+- **Status codes:** `201`, `400`, `401`, `403`, `409`.
+
+### Get and update customer
+
+- **Methods and URL:** `GET` or `PATCH /api/customers/{id}/`.
+- **Roles:** Reads require `customers:read`; PATCH requires `customers:write`
+  (Sales Manager or Super Admin).
+- **PATCH body:** Any non-empty subset of the create fields. A supplied address
+  replaces that full address object; send `null` to clear it. Server-owned
+  timestamps and search fields cannot be written.
+- **Validation:** `{id}` must be a MongoDB ObjectId. Missing customers return
+  `404`; duplicate code or tax ID returns `409`.
+- **Success response (`200`):** Standard envelope with `data.customer`.
+- **Status codes:** `200`, `400`, `401`, `403`, `404`, `409`.
+
+### Customer sales-order history
+
+- **Method and URL:** `GET /api/customers/{id}/sales-orders/`.
+- **Role:** Sales Manager or Super Admin (`sales:read`).
+- **Query parameters:** `page` (default `1`), `page_size` (default `20`,
+  maximum `100`), and optional `status` (`draft`, `confirmed`, `fulfilled`, or
+  `cancelled`).
+- **Success response (`200`):** Standard envelope with `data.sales_orders` and
+  pagination metadata. Orders are sorted newest-first.
+- **Validation:** `{id}` must be a valid ObjectId; a missing customer returns
+  `404`. The route is declared before the customer detail route.
+- **Status codes:** `200`, `400`, `401`, `403`, `404`.
+
 ## Suppliers
 
 Supplier endpoints require a bearer access token. Supplier list and detail reads
