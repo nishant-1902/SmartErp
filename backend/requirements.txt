@@ -12,7 +12,7 @@ python-dotenv==1.2.4
 django-cors-headers==4.9.0
 # Provides Argon2 password hashing support for Django's standalone hashers.
 argon2-cffi==25.1.0
-# Production-capable WSGI server that runs on Windows.
+# Windows-friendly WSGI server for local production-settings testing.
 waitress==3.0.2
-# Production WSGI server for non-Windows platforms only.
+# Linux/Unix production WSGI server; Gunicorn does not run on Windows.
 gunicorn==26.2.0; sys_platform != 'win32'

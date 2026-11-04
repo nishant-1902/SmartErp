@@ -1,4 +1,5 @@
 from datetime import timedelta
+import logging
 from urllib.parse import parse_qs, urlsplit
 from uuid import uuid4
 
@@ -399,8 +400,9 @@ def test_deactivation_invalidates_access_and_revokes_refresh_tokens(
 def test_activate_and_admin_reset_password_are_audited(
     client,
     management_api,
-    capsys,
+    caplog,
 ):
+    caplog.set_level(logging.INFO, logger="accounts.services")
     admin = insert_user(management_api, "super_admin")
     target = insert_user(
         management_api,
@@ -427,13 +429,12 @@ def test_activate_and_admin_reset_password_are_audited(
     assert activate.json()["data"]["user"]["is_active"] is True
     assert reset.status_code == 200
     assert "token" not in reset.json()["data"]
-    captured = capsys.readouterr()
-    assert "Password reset link:" in captured.out
-    reset_link = captured.out.split("Password reset link:", 1)[1].strip()
+    assert "Development password reset link:" in caplog.text
+    reset_link = caplog.text.split("Development password reset link:", 1)[1].strip()
     reset_query = parse_qs(urlsplit(reset_link).query)
     reset_user = management_api["users"].find_one({"_id": target["_id"]})
     assert reset_user["password_reset_token_hash"]
-    assert reset_user["password_reset_token_hash"] not in captured.out
+    assert reset_user["password_reset_token_hash"] not in caplog.text
     assert management_api["audit_logs"].find_one(
         {"action": "user_activated", "outcome": "success"}
     ) is not None

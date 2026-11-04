@@ -45,7 +45,7 @@ def main() -> int:
 
     arguments = parse_arguments()
     if not settings.MONGO_URI or not settings.MONGO_DB_NAME:
-        print("MONGO_URI and MONGO_DB_NAME must be configured.", file=sys.stderr)
+        sys.stderr.write("MONGO_URI and MONGO_DB_NAME must be configured.\n")
         return 2
 
     try:
@@ -59,20 +59,20 @@ def main() -> int:
             else:
                 user = find_user_by_id(database, parse_object_id(arguments.user_id))
     except PyMongoError:
-        print("Could not connect to the configured MongoDB database.", file=sys.stderr)
+        sys.stderr.write("Could not connect to the configured MongoDB database.\n")
         return 2
     except ValidationFailed as exc:
-        print(f"Invalid user identifier: {exc}", file=sys.stderr)
+        sys.stderr.write(f"Invalid user identifier: {exc}\n")
         return 2
     except ValueError as exc:
-        print(f"Invalid user identifier: {exc}", file=sys.stderr)
+        sys.stderr.write(f"Invalid user identifier: {exc}\n")
         return 2
 
     if user is None:
-        print("No matching user was found.", file=sys.stderr)
+        sys.stderr.write("No matching user was found.\n")
         return 1
     if user.get("is_active") is not True:
-        print("The selected user is inactive.", file=sys.stderr)
+        sys.stderr.write("The selected user is inactive.\n")
         return 1
 
     lifetime_seconds = settings.JWT_ACCESS_TOKEN_LIFETIME_SECONDS
@@ -82,16 +82,15 @@ def main() -> int:
         or not settings.JWT_AUDIENCE
         or lifetime_seconds <= 0
     ):
-        print(
-            "JWT signing settings and a positive lifetime must be configured.",
-            file=sys.stderr,
+        sys.stderr.write(
+            "JWT signing settings and a positive lifetime must be configured.\n"
         )
         return 2
 
     issued_at = datetime.now(timezone.utc) - timedelta(
         seconds=lifetime_seconds + 60
     )
-    print(create_access_token(user, now=issued_at))
+    sys.stdout.write(f"{create_access_token(user, now=issued_at)}\n")
     return 0
 
 

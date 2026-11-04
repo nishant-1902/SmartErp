@@ -2,6 +2,7 @@
 
 import hashlib
 import hmac
+import logging
 import secrets
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
@@ -46,6 +47,8 @@ from common.object_id import parse_object_id
 from common.pagination import Pagination
 from common.serialization import serialize_document
 from common.time import utc_now
+
+logger = logging.getLogger(__name__)
 
 REFRESH_RACE_GRACE_SECONDS = 10
 
@@ -477,7 +480,7 @@ def initiate_admin_password_reset(
     link = (
         f"http://localhost:5173/reset-password?email={user['email']}&token={token}"
     )
-    print(f"Password reset link: {link}")
+    logger.info("Development password reset link: %s", link)
 
 
 def list_managed_audit_logs(
@@ -690,7 +693,7 @@ def request_password_reset(
             session=session,
         )
     link = f"http://localhost:5173/reset-password?email={user['email']}&token={token}"
-    print(f"Password reset link: {link}")
+    logger.info("Development password reset link: %s", link)
     return link
 
 

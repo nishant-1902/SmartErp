@@ -2030,3 +2030,66 @@
 ### Next step
 
 - Before release, provision a dedicated empty MongoDB replica-set test database and execute/add real-database transactional integration tests. Then run the credentialed Postman workflow with disposable local data. Suggested commit: `fix: verify SmartERP phases and align MongoDB indexes`.
+
+## 2026-11-04 — Production preparation
+
+### Files created
+
+- `scripts/start-dev.ps1` — checks for a running MongoDB Windows service, then launches Django and Vite in separate PowerShell windows.
+- `scripts/run-tests.ps1` — runs Django checks, backend tests and coverage, frontend tests, lint, and production build.
+- `scripts/backup-db.ps1` — creates a timestamped compressed `mongodump` backup, reading credentials from environment or backend `.env` without putting the URI in the command line.
+- `backend/tests/test_settings.py` — tests development/production settings, allowed-host handling, security defaults, and production log configuration.
+
+### Files modified
+
+- `.gitignore` — excludes generated database backups.
+- `README.md` — added exact Windows setup/start/test commands, Waitress local smoke guidance, Gunicorn Linux instructions, and frontend production-build/hosting notes.
+- `backend/.env.example` — documents environment mode, production secrets, host list, HTTPS, proxy trust, and log settings.
+- `backend/accounts/services.py` — replaces password-reset `print()` calls with development-only logger output; production reset links are not exposed without configured email delivery.
+- `backend/config/settings.py` — adds a validated `SMARTERP_ENV` switch, production secret/host requirements, secure cookies, HTTPS/HSTS, browser security headers, trusted-proxy option, and rotating file logs.
+- `backend/requirements.txt` — clarifies Waitress use on Windows and Gunicorn's Linux-only role.
+- `backend/scripts/make_expired_token.py` — writes CLI output through standard streams rather than `print()`.
+- `backend/tests/accounts/test_user_management.py` — checks password-reset logging instead of captured stdout.
+- `docs/deployment.md` — documents development versus production settings, Windows Waitress and Linux Gunicorn, static SPA hosting, public build-time `VITE_*` variables, MongoDB, backups, and release checks.
+- `docs/PROGRESS.md` — records this production-preparation step and observed verification results.
+
+### Dependencies installed
+
+- None. Waitress, pytest tooling, and frontend dependencies were already present.
+- MongoDB Database Tools (`mongodump`) are not installed or available on PATH.
+
+### Commands run and observed results
+
+- `.\scripts\run-tests.ps1` — completed with exit code 0; Django system check reported no issues.
+- `pytest -v` — `377 passed in 9.77s`.
+- `pytest --cov=. --cov-report=term-missing` — `377 passed in 11.90s`; overall coverage `92%` (8,611 statements, 653 missed).
+- `npm test` — 41 test files and 116 tests passed.
+- `npm run lint` — completed with exit code 0 and no diagnostics.
+- `npm run build` — 980 modules transformed; production build completed in 1.16 seconds.
+- Targeted production settings/password-reset tests — `4 passed in 2.16s`.
+- PowerShell parser validation — all three helper scripts parsed without errors.
+- Waitress production-settings smoke — `/api/health/` returned HTTP 200; security headers included `nosniff`, `DENY`, and `same-origin`. The built frontend served `/sales-orders/123` with HTTP 200 and the React root element. A Django production test-client request marked as HTTPS by the configured trusted proxy returned `Strict-Transport-Security: max-age=31536000; includeSubDomains`. HSTS is intentionally not sent on plain local HTTP.
+- `.\scripts\backup-db.ps1` — stopped at its prerequisite check with the explicit message that `mongodump` is not installed/on PATH; no backup was created.
+- Backend Python search — no `print()` calls remain under `backend/`.
+- `git diff --check` — passed with no whitespace errors.
+- Smoke-test servers were stopped; no listeners remain on ports 8000 or 4173.
+
+### Features completed
+
+- Development remains the default. Production mode now rejects debug mode, wildcard hosts, weak/missing secrets, missing Mongo connection details, and non-positive HSTS.
+- Production enables secure cookies, HTTPS redirection and HSTS, security headers, and rotating logs. Trusted `X-Forwarded-Proto` support is opt-in and must only be enabled behind a proxy that overwrites that header.
+- Documented that Gunicorn does not run on Windows, Waitress is for local Windows production-setting checks, and Django `runserver` is not a production server.
+- Documented serving `frontend/dist` from static hosting with SPA fallback and setting `VITE_API_BASE_URL` before build; Vite variables are public and must not contain secrets.
+- Added Windows helper scripts for local startup, checks, and database backup.
+
+### Known problems and not implemented yet
+
+- Real TLS termination was not configured locally; HSTS behavior was verified through Django's HTTPS-proxy test client, not a public HTTPS endpoint.
+- `mongodump` backup execution cannot be verified until MongoDB Database Tools are installed.
+- Production password-reset email delivery is not configured; production password-reset links remain disabled.
+- Local production smoke used a placeholder Mongo URI and did not verify a live production MongoDB connection. The health endpoint itself returned 200.
+- Remaining live MongoDB transaction/Postman limitations from the ten-phase audit still apply.
+
+### Next step
+
+- Install MongoDB Database Tools and run `.\scripts\backup-db.ps1` against an explicitly selected local database. Configure a production mail provider and TLS-terminating reverse proxy before deploying. Suggested commit: `chore: prepare SmartERP for production`.
