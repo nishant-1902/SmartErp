@@ -10,6 +10,13 @@ export const navigationItems = [
     implemented: true,
   },
   {
+    label: 'Reports',
+    path: '/reports',
+    icon: '▥',
+    requiredPermission: 'reports:read',
+    implemented: true,
+  },
+  {
     label: 'Employees',
     path: '/employees',
     icon: '◎',

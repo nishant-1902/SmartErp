@@ -9,6 +9,7 @@ const AuthLayout = lazy(() => import('./layouts/AuthLayout.jsx'))
 const MainLayout = lazy(() => import('./layouts/MainLayout.jsx'))
 const Forbidden = lazy(() => import('./pages/Forbidden.jsx'))
 const Home = lazy(() => import('./pages/Home.jsx'))
+const Reports = lazy(() => import('./pages/Reports.jsx'))
 const Employees = lazy(() => import('./pages/Employees.jsx'))
 const EmployeeProfile = lazy(() => import('./pages/EmployeeProfile.jsx'))
 const Departments = lazy(() => import('./pages/Departments.jsx'))
@@ -76,6 +77,12 @@ function App() {
                 <Route path="/403" element={<Forbidden />} />
                 <Route element={<MainLayout />}>
                   <Route index element={<Home />} />
+                  <Route
+                    element={<RoleRoute permission="reports:read" />}
+                    path="reports"
+                  >
+                    <Route index element={<Reports />} />
+                  </Route>
                   <Route
                     element={<RoleRoute permission="own-profile:read" />}
                     path="profile"

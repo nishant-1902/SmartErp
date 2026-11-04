@@ -10,6 +10,7 @@ import pytest
 from bson import ObjectId
 from bson.decimal128 import Decimal128
 from django.conf import settings
+from pymongo.errors import OperationFailure
 from rest_framework.test import APIClient
 
 from accounts.tokens import create_access_token
@@ -107,6 +108,8 @@ def _matches(document, query, database):
         if isinstance(expected, dict):
             for operator, value in expected.items():
                 if operator == "$in" and actual not in value:
+                    return False
+                if operator == "$nin" and actual in value:
                     return False
                 if operator == "$gte" and not actual >= value:
                     return False
@@ -444,6 +447,16 @@ def test_inventory_low_stock_and_dashboard_widget_permissions(reports_api, clien
     assert low_stock.json()["meta"]["total"] == 1
     assert low_stock.json()["data"]["low_stock"][0]["sku"] == "STOCK-2"
     assert "inventory_statistics" in data
+    assert data["inventory_by_category"] == [
+        {
+            "category": "Tools",
+            "product_count": 2,
+            "available_quantity": 11,
+            "stock_cost_value": "45.00",
+        }
+    ]
+    assert len(data["low_stock_products"]) == 1
+    assert data["low_stock_products"][0]["sku"] == "STOCK-2"
     assert "pending_purchase_orders" in data
     assert "sales_chart" in data
     assert "total_customers" not in data
@@ -504,6 +517,11 @@ def test_resource_reports_and_dashboard_return_seeded_totals(reports_api, client
     assert next(
         month for month in widgets["sales_chart"] if month["month"] == current_month
     )["net_sales"] == "10.00"
+    chart_months = {month["month"]: month for month in widgets["purchases_vs_sales"]}
+    assert chart_months["2026-03"]["net_sales"] == "80.00"
+    assert chart_months["2026-03"]["purchase_total"] == "50.00"
+    assert chart_months["2026-04"]["net_sales"] == "40.00"
+    assert chart_months["2026-04"]["purchase_total"] == "20.00"
     assert len(widgets["recent_transactions"]) >= 4
     assert {item["type"] for item in widgets["recent_transactions"]} == {
         "purchase",
@@ -582,3 +600,33 @@ def test_report_date_validation_and_endpoint_permissions(reports_api, client):
     assert invalid_date.status_code == 400
     assert reversed_dates.status_code == 400
     assert unsafe.status_code == 400
+
+
+def test_dashboard_keeps_other_widgets_when_one_aggregation_fails(
+    reports_api,
+    client,
+    monkeypatch,
+):
+    seed_data(reports_api)
+    user = add_user(reports_api, "inventory_manager")
+
+    def fail_category_aggregation(database):
+        raise OperationFailure("private database detail", 123)
+
+    monkeypatch.setattr(
+        "reports.services.repository.inventory_by_category",
+        fail_category_aggregation,
+    )
+    response = client.get("/api/reports/dashboard/", **headers(user))
+
+    dashboard = response.json()["data"]["dashboard"]
+    assert response.status_code == 200
+    assert dashboard["total_products"] == 2
+    assert dashboard["low_stock_count"] == 1
+    assert dashboard["low_stock_products"][0]["sku"] == "STOCK-2"
+    assert "inventory_by_category" not in dashboard
+    assert dashboard["widget_errors"]["inventory_by_category"] == {
+        "code": "widget_unavailable",
+        "message": "This dashboard widget could not be loaded.",
+    }
+    assert "private database detail" not in response.content.decode()

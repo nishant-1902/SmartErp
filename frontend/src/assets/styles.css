@@ -229,6 +229,28 @@ a {
   letter-spacing: -0.04em;
 }
 
+.dashboard-widget {
+  height: 100%;
+}
+
+.dashboard-widget__skeleton {
+  min-height: 7rem;
+}
+
+.dashboard-chart {
+  min-width: 0;
+  height: 100%;
+  background: #fff;
+}
+
+.report-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--erp-border);
+  padding-bottom: 0.75rem;
+}
+
 .data-table-wrap {
   overflow: hidden;
   background: #fff;

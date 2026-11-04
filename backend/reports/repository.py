@@ -211,6 +211,81 @@ def product_inventory_statistics(database: Database[Any]) -> dict[str, Any]:
     }
 
 
+def inventory_by_category(database: Database[Any]) -> list[dict[str, Any]]:
+    """Aggregate current active-product stock quantities and cost by category."""
+    return list(
+        database["products"].aggregate(
+            [
+                {"$match": {"is_active": True}},
+                {
+                    "$group": {
+                        "_id": "$category",
+                        "product_count": {"$sum": 1},
+                        "available_quantity": {
+                            "$sum": {
+                                "$subtract": [
+                                    "$quantity_on_hand",
+                                    "$reserved_quantity",
+                                ]
+                            }
+                        },
+                        "stock_cost_value": {
+                            "$sum": {
+                                "$multiply": [
+                                    "$cost_price",
+                                    "$quantity_on_hand",
+                                ]
+                            }
+                        },
+                    }
+                },
+                {"$sort": {"_id": 1}},
+            ]
+        )
+    )
+
+
+def monthly_purchase_totals(
+    database: Database[Any],
+    *,
+    start: datetime,
+    end: datetime,
+    timezone_name: str,
+) -> list[dict[str, Any]]:
+    """Group non-draft purchase commitments by business calendar month."""
+    return list(
+        database["purchase_orders"].aggregate(
+            [
+                {
+                    "$match": {
+                        "created_at": {"$gte": start, "$lt": end},
+                        "status": {"$nin": ["draft", "rejected", "cancelled"]},
+                    }
+                },
+                {
+                    "$addFields": {
+                        "month": {
+                            "$dateToString": {
+                                "format": "%Y-%m",
+                                "date": "$created_at",
+                                "timezone": timezone_name,
+                            }
+                        }
+                    }
+                },
+                {
+                    "$group": {
+                        "_id": "$month",
+                        "purchase_count": {"$sum": 1},
+                        "purchase_total": {"$sum": "$grand_total"},
+                    }
+                },
+                {"$sort": {"_id": 1}},
+            ]
+        )
+    )
+
+
 def list_low_stock(
     database: Database[Any],
     *,

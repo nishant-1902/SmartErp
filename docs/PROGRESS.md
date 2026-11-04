@@ -1792,3 +1792,67 @@
 ### Next step
 
 - Stop for acceptance. Do not start another implementation step automatically.
+
+## 2026-11-04 — React dashboard and reports
+
+### Files created
+
+- `frontend/src/components/DashboardWidget.jsx` — shared widget card with loading skeleton, independent error/unavailable state, and retry control.
+- `frontend/src/pages/Reports.jsx` and `frontend/src/pages/Reports.test.jsx` — permission-filtered Sales, Inventory, Purchases, and Employees tabs with date filtering, pagination, CSV export, and independent inventory-summary/list errors.
+- `frontend/src/services/reportsService.js` and `frontend/src/services/reportsService.test.js` — typed-by-contract client wrappers for dashboard and report endpoints; report routes are allowlisted.
+- `frontend/src/utils/csvExport.js` and `frontend/src/utils/csvExport.test.js` — quoted UTF-8 CSV generation, formula-prefix neutralization, and temporary object-URL download.
+
+### Files modified
+
+- `frontend/src/App.jsx` — lazy-loads the Reports page behind `reports:read`.
+- `frontend/src/assets/styles.css` — styles dashboard skeletons, charts, and report tabs.
+- `frontend/src/config/navigation.js` — adds permission-filtered Reports navigation.
+- `frontend/src/pages/Home.jsx` and `frontend/src/pages/Home.test.jsx` — replaces the placeholder with API-backed metrics, sales/comparison charts, category inventory, low-stock and recent-transaction tables, and widget error handling.
+- `backend/reports/repository.py` — adds monthly purchase-commitment and active inventory-by-category aggregation pipelines for the dashboard.
+- `backend/reports/services.py` — exposes permission-filtered chart and low-stock data and isolates individual MongoDB aggregation failures with safe `widget_errors`.
+- `backend/tests/reports/test_reports_api.py` — verifies exact dashboard chart/category data and that one failed aggregation does not hide other widgets.
+- `docs/api-documentation.md` — documents dashboard chart data, purchase-comparison semantics, and partial widget failures.
+- `docs/PROGRESS.md` — records this implementation and validation results.
+
+### Dependencies installed
+
+- None. Existing React, Recharts, Bootstrap, Axios, DRF, and PyMongo dependencies were reused.
+
+### Commands run and observed
+
+- `npm test -- src/pages/Home.test.jsx src/pages/Reports.test.jsx src/services/reportsService.test.js src/utils/csvExport.test.js` from `frontend\` — `Test Files 4 passed (4); Tests 15 passed (15)`.
+- Final `npm test` from `frontend\` — `Test Files 40 passed (40); Tests 110 passed (110); Duration 33.66s`.
+- `npm run lint` from `frontend\` — passed with no diagnostics.
+- Final `npm run build` from `frontend\` — passed; Vite transformed 980 modules and built in 1.32s.
+- Focused report/index suite — `14 passed in 0.30s`.
+- Final `python -m pytest -c pytest.ini tests -q` from `backend\` — `360 passed in 24.08s`.
+- `python manage.py check` from `backend\` — `System check identified no issues (0 silenced).`
+- `python -m compileall -q reports tests\reports` from `backend\` and `git diff --check` — passed with no output.
+
+### Features completed
+
+- Replaced the welcome placeholder with a live dashboard sourced from `/api/reports/dashboard/`. Metric values and charts are rendered from returned data, not sample figures.
+- Added monthly gross/net sales, monthly purchase commitments compared with net fulfilled sales, active inventory available quantity by category, low-stock products, and merged recent transactions.
+- Added dashboard skeletons and per-widget retry/error states. The backend logs MongoDB widget errors, returns a generic `widget_errors` entry for only the failed aggregation, and continues returning other widgets.
+- Added an accessible, permission-filtered Reports route and navigation entry with Sales, Inventory, Purchases, and Employees tabs.
+- Added inclusive date filters and bounded server-side pagination; Inventory pairs the stock summary with a date-filtered, paginated low-stock list.
+- Added client-side CSV download of only the returned current page. Cells are CSV-quoted, embedded quotes escaped, and spreadsheet formula prefixes (including after leading control whitespace) neutralized.
+
+### Tests passed
+
+- Focused frontend report/dashboard/CSV tests: 15 passed.
+- Focused backend report/index tests: 14 passed.
+- Full frontend suite: 110 passed.
+- Frontend lint and production build: passed.
+- Full backend suite: 360 passed.
+- Django system check, Python compilation, and `git diff --check`: passed.
+
+### Known problems and not implemented yet
+
+- If the dashboard HTTP request itself fails (for example, the API is unreachable), all dashboard widgets show the request error; individual MongoDB aggregation failures are isolated.
+- CSV download exports only the current returned page, not all pages; the page states this explicitly.
+- No dependencies were installed.
+
+### Next step
+
+- Wait for acceptance before starting another implementation step.

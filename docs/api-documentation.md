@@ -952,14 +952,26 @@ maximum `100`) and return pagination metadata.
 - **Method and URL:** `GET /api/reports/dashboard/`.
 - **Purpose:** Return permitted dashboard widgets: active employee,
   department, product, supplier, and customer counts; low-stock count and
-  inventory totals; pending purchase-order count and purchase statistics;
-  fulfilled current-month sales net of returns; 12 months of sales chart data;
-  and up to 10 merged recent sales/purchase transactions.
+  inventory totals; inventory quantities by category; up to 10 low-stock
+  products; pending purchase-order count and purchase statistics; fulfilled
+  current-month sales net of returns; 12 months of sales chart data; monthly
+  purchase commitments compared with net sales when both permissions are
+  present; and up to 10 merged recent sales/purchase transactions.
 - **Permissions:** `reports:read`; each widget additionally requires its
   corresponding read permission. Recent transactions include only domains the
   caller may read. Date filters affect recent transactions; current-month and
   chart periods are fixed calendar windows.
 - **Success (`200`):** Standard envelope containing `data.dashboard`.
+- **Partial failures:** A failed MongoDB aggregation is logged by widget name,
+  omitted from its normal data key, and reported in
+  `data.dashboard.widget_errors` using a safe `code` and generic `message`.
+  Other dashboard widgets continue to load. A network/database connection
+  failure preventing the endpoint from running still affects the whole request.
+- **Chart semantics:** Inventory-by-category uses the current available stock
+  quantity of active products. The purchase comparison groups non-draft,
+  non-rejected, non-cancelled purchase-order totals by their creation month;
+  sales are fulfilled-order net totals grouped by fulfillment month. It is an
+  order-value comparison, not a cash-flow or received-goods accounting report.
 
 ### Report lists and summaries
 
@@ -982,6 +994,14 @@ filters and month grouping, and subtract recorded return/credit-note totals.
 All report money values are exact decimal strings; no float conversion is
 performed. Inventory statistics describe current stock and are not historical
 as-of-date snapshots.
+
+The React dashboard calls only `/api/reports/dashboard/`; its charts, metric
+cards, low-stock table, and recent-transaction table render returned values.
+The Reports page calls the selected report endpoint, sends the inclusive date
+filters and page values, and exports only the current returned page. CSV cells
+are quoted and strings with spreadsheet formula prefixes are escaped before
+download. Inventory summary values describe current stock; its low-stock list
+is paginated and can be filtered by product creation date.
 
 ### Aggregation indexes and explain results
 

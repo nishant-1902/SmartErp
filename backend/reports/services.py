@@ -1,6 +1,8 @@
 """Report date handling, permission-filtered dashboard data, and serialization."""
 
 import calendar
+import logging
+from collections.abc import Callable
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Any
@@ -9,10 +11,13 @@ from zoneinfo import ZoneInfo
 from bson.decimal128 import Decimal128
 from django.conf import settings
 from pymongo.database import Database
+from pymongo.errors import PyMongoError
 
 from common.pagination import Pagination
 from common.serialization import serialize_document
 from reports import repository
+
+logger = logging.getLogger(__name__)
 
 
 def _business_timezone() -> ZoneInfo:
@@ -170,6 +175,40 @@ def _monthly_sales_data(
         )
         current_month = _add_months(current_month, 1)
     return output
+
+
+def _purchase_chart_data(
+    database: Database[Any],
+    sales_chart: list[dict[str, Any]],
+    *,
+    now: datetime | None = None,
+) -> list[dict[str, Any]]:
+    """Align fulfilled net sales with monthly purchase commitments."""
+    start, end = _default_month_window(now)
+    purchase_rows = repository.monthly_purchase_totals(
+        database,
+        start=start,
+        end=end,
+        timezone_name=settings.BUSINESS_TIMEZONE,
+    )
+    purchases_by_month = {row["_id"]: row for row in purchase_rows}
+    return [
+        {
+            "month": month["month"],
+            "net_sales": month["net_sales"],
+            "purchase_total": _money_text(
+                purchases_by_month.get(month["month"], {}).get(
+                    "purchase_total",
+                    Decimal128("0.00"),
+                )
+            ),
+            "purchase_count": purchases_by_month.get(
+                month["month"],
+                {},
+            ).get("purchase_count", 0),
+        }
+        for month in sales_chart
+    ]
 
 
 def monthly_sales_report(
@@ -375,6 +414,26 @@ def _recent_transactions(
     return [_public(value) for value in transactions[:10]]
 
 
+def _load_dashboard_widget(
+    name: str,
+    loader: Callable[[], Any],
+    widget_errors: dict[str, dict[str, str]],
+) -> Any:
+    """Run one widget query and convert MongoDB failures to safe widget errors."""
+    try:
+        return loader()
+    except PyMongoError:
+        logger.exception(
+            "Dashboard widget aggregation failed",
+            extra={"widget": name},
+        )
+        widget_errors[name] = {
+            "code": "widget_unavailable",
+            "message": "This dashboard widget could not be loaded.",
+        }
+        return None
+
+
 def dashboard_report(
     database: Database[Any],
     *,
@@ -385,79 +444,176 @@ def dashboard_report(
 ) -> dict[str, Any]:
     """Return only dashboard widgets authorized by the caller's permissions."""
     widgets: dict[str, Any] = {}
+    widget_errors: dict[str, dict[str, str]] = {}
     if "employees:read" in permissions:
-        widgets["total_employees"] = repository.active_count(
-            database,
-            "employees",
-            "status",
+        value = _load_dashboard_widget(
+            "total_employees",
+            lambda: repository.active_count(database, "employees", "status"),
+            widget_errors,
         )
+        if value is not None:
+            widgets["total_employees"] = value
     if "departments:read" in permissions:
-        widgets["total_departments"] = repository.active_count(
-            database,
-            "departments",
-            "is_active",
+        value = _load_dashboard_widget(
+            "total_departments",
+            lambda: repository.active_count(database, "departments", "is_active"),
+            widget_errors,
         )
+        if value is not None:
+            widgets["total_departments"] = value
     if "products:read" in permissions:
-        widgets["total_products"] = repository.active_count(
-            database,
-            "products",
-            "is_active",
+        value = _load_dashboard_widget(
+            "total_products",
+            lambda: repository.active_count(database, "products", "is_active"),
+            widget_errors,
         )
+        if value is not None:
+            widgets["total_products"] = value
     if {"products:read", "stock:read"} <= permissions:
-        widgets["inventory_statistics"] = inventory_report(database)
-        widgets["low_stock_count"] = widgets["inventory_statistics"]["low_stock_count"]
+        stats = _load_dashboard_widget(
+            "inventory_statistics",
+            lambda: inventory_report(database),
+            widget_errors,
+        )
+        if stats is not None:
+            widgets["inventory_statistics"] = stats
+            widgets["low_stock_count"] = stats["low_stock_count"]
+        else:
+            widget_errors["low_stock_count"] = widget_errors[
+                "inventory_statistics"
+            ]
+        categories = _load_dashboard_widget(
+            "inventory_by_category",
+            lambda: [
+                {
+                    "category": row["_id"],
+                    "product_count": row["product_count"],
+                    "available_quantity": row["available_quantity"],
+                    "stock_cost_value": _money_text(row["stock_cost_value"]),
+                }
+                for row in repository.inventory_by_category(database)
+            ],
+            widget_errors,
+        )
+        if categories is not None:
+            widgets["inventory_by_category"] = categories
+        low_stock_values = _load_dashboard_widget(
+            "low_stock_products",
+            lambda: [
+                _public(value)
+                for value in repository.list_low_stock(
+                    database,
+                    start=None,
+                    end=None,
+                    skip=0,
+                    limit=10,
+                )[0]
+            ],
+            widget_errors,
+        )
+        if low_stock_values is not None:
+            widgets["low_stock_products"] = low_stock_values
     if "suppliers:read" in permissions:
-        widgets["total_suppliers"] = repository.active_count(
-            database,
-            "suppliers",
-            "status",
+        value = _load_dashboard_widget(
+            "total_suppliers",
+            lambda: repository.active_count(database, "suppliers", "status"),
+            widget_errors,
         )
+        if value is not None:
+            widgets["total_suppliers"] = value
     if "customers:read" in permissions:
-        widgets["total_customers"] = repository.active_count(
-            database,
-            "customers",
-            "status",
+        value = _load_dashboard_widget(
+            "total_customers",
+            lambda: repository.active_count(database, "customers", "status"),
+            widget_errors,
         )
+        if value is not None:
+            widgets["total_customers"] = value
     if "purchase:read" in permissions:
-        widgets["pending_purchase_orders"] = repository.pending_purchase_count(database)
-        widgets["purchase_statistics"] = _purchase_statistics(database)
+        pending = _load_dashboard_widget(
+            "pending_purchase_orders",
+            lambda: repository.pending_purchase_count(database),
+            widget_errors,
+        )
+        if pending is not None:
+            widgets["pending_purchase_orders"] = pending
+        statistics = _load_dashboard_widget(
+            "purchase_statistics",
+            lambda: _purchase_statistics(database),
+            widget_errors,
+        )
+        if statistics is not None:
+            widgets["purchase_statistics"] = statistics
     if "sales:read" in permissions:
+        sales_chart = _load_dashboard_widget(
+            "sales_chart",
+            lambda: _monthly_sales_data(
+                database,
+                date_from=None,
+                date_to=None,
+                now=now,
+            ),
+            widget_errors,
+        )
         start, end = _current_month_window(now)
-        current = repository.monthly_sales(
-            database,
-            start=start,
-            end=end,
-            timezone_name=settings.BUSINESS_TIMEZONE,
+        current = _load_dashboard_widget(
+            "monthly_sales",
+            lambda: repository.monthly_sales(
+                database,
+                start=start,
+                end=end,
+                timezone_name=settings.BUSINESS_TIMEZONE,
+            ),
+            widget_errors,
         )
-        month_key = (now or datetime.now(timezone.utc)).astimezone(
-            _business_timezone()
-        ).strftime("%Y-%m")
-        month = next((row for row in current if row["_id"] == month_key), {})
-        widgets["monthly_sales"] = {
-            "month": month_key,
-            "order_count": month.get("order_count", 0),
-            "gross_sales": _money_text(
-                month.get("gross_sales", Decimal128("0.00"))
-            ),
-            "returns_total": _money_text(
-                month.get("returns_total", Decimal128("0.00"))
-            ),
-            "net_sales": _money_text(
-                month.get("net_sales", Decimal128("0.00"))
-            ),
-        }
-        widgets["sales_chart"] = _monthly_sales_data(
-            database,
-            date_from=None,
-            date_to=None,
-            now=now,
-        )
+        if current is not None:
+            month_key = (now or datetime.now(timezone.utc)).astimezone(
+                _business_timezone()
+            ).strftime("%Y-%m")
+            month = next((row for row in current if row["_id"] == month_key), {})
+            widgets["monthly_sales"] = {
+                "month": month_key,
+                "order_count": month.get("order_count", 0),
+                "gross_sales": _money_text(
+                    month.get("gross_sales", Decimal128("0.00"))
+                ),
+                "returns_total": _money_text(
+                    month.get("returns_total", Decimal128("0.00"))
+                ),
+                "net_sales": _money_text(
+                    month.get("net_sales", Decimal128("0.00"))
+                ),
+            }
+        if sales_chart is not None:
+            widgets["sales_chart"] = sales_chart
+    if {"sales:read", "purchase:read"} <= permissions:
+        if sales_chart is None:
+            widget_errors["purchases_vs_sales"] = {
+                "code": "widget_unavailable",
+                "message": "This dashboard widget could not be loaded.",
+            }
+        else:
+            comparison = _load_dashboard_widget(
+                "purchases_vs_sales",
+                lambda: _purchase_chart_data(database, sales_chart, now=now),
+                widget_errors,
+            )
+            if comparison is not None:
+                widgets["purchases_vs_sales"] = comparison
     if "sales:read" in permissions or "purchase:read" in permissions:
         start, end = _date_window(date_from, date_to)
-        widgets["recent_transactions"] = _recent_transactions(
-            database,
-            permissions=permissions,
-            start=start,
-            end=end,
+        transactions = _load_dashboard_widget(
+            "recent_transactions",
+            lambda: _recent_transactions(
+                database,
+                permissions=permissions,
+                start=start,
+                end=end,
+            ),
+            widget_errors,
         )
+        if transactions is not None:
+            widgets["recent_transactions"] = transactions
+    if widget_errors:
+        widgets["widget_errors"] = widget_errors
     return widgets
