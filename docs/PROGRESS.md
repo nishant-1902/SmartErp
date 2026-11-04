@@ -848,6 +848,71 @@
 
 - Wait for approval before starting a business page; the UI foundation is complete.
 
+## 2026-11-04 — Reports backend
+
+### Files created
+
+- `backend/reports/serializers.py` — validates shared date and pagination query parameters; rejects unknown, dotted, and `$`-prefixed keys.
+- `backend/reports/repository.py` — defines the PyMongo aggregation pipelines for report lists, counts, inventory and purchase statistics, sales returns, monthly sales, and recent transactions.
+- `backend/reports/services.py` — converts business-local date ranges to UTC, groups/fills business calendar months, paginates results, formats exact money strings, and assembles permission-filtered dashboard widgets.
+- `backend/reports/urls.py` — declares the fixed report endpoint routes.
+- `backend/tests/reports/test_reports_api.py` — tests seeded exact outputs, date filters, empty results, endpoint permissions, dashboard widgets, pagination, and money serialization with an in-memory aggregation fake.
+- `docs/postman/reports.postman_collection.json` — provides requests for the dashboard and all eight report routes.
+
+### Files modified
+
+- `backend/reports/views.py` — added authenticated, permission-checked handlers for the reports endpoints.
+- `backend/config/urls.py` — mounted `/api/reports/`.
+- `backend/database/indexes.py` — declared report indexes for joining/creation/update/fulfilment date filters.
+- `backend/tests/database/test_indexes.py` — verifies the declared report index definitions.
+- `docs/api-documentation.md` — documents report filters, response behavior, permissions, aggregation semantics, indexes, and observed explain plans.
+- `docs/PROGRESS.md` — recorded this implementation and validation.
+
+### Dependencies installed
+
+- None. Existing Django REST Framework, PyMongo, and BSON Decimal128 dependencies were reused.
+
+### Commands run and observed
+
+- `python -m pytest -c backend\pytest.ini backend\tests\reports\test_reports_api.py backend\tests\database\test_indexes.py -q` — `13 passed in 0.24s`.
+- `python -m pytest -c backend\pytest.ini backend\tests -q` — `359 passed in 6.70s`.
+- `python manage.py check` from `backend\` — `System check identified no issues (0 silenced).`
+- `python -m compileall -q reports tests\reports` from `backend\` — passed with no output.
+- Postman collection parsed as JSON — `Postman JSON: valid`.
+- Python source/test line-length check — zero lines over 99 characters.
+- `git diff --check` — passed with no output.
+- Configured MongoDB connectivity check — `MongoDB ping: 1.0`.
+- Read-only MongoDB `explain("executionStats")` checks ran for sales, monthly sales, inventory, low-stock, employees, departments, suppliers, purchases, pending-purchase counts, purchase statistics, recent transactions, and active dashboard counts.
+
+### Features completed
+
+- Implemented `GET /api/reports/dashboard/`, `/sales/`, `/inventory/`, `/low-stock/`, `/employees/`, `/departments/`, `/suppliers/`, `/purchases/`, and `/monthly-sales/`.
+- Enforced `reports:read` plus each endpoint's relevant domain permission. Dashboard widgets and merged recent transactions are filtered using the caller's role permissions.
+- Validated inclusive `date_from` / `date_to` ranges in `BUSINESS_TIMEZONE`, with UTC half-open query boundaries; list endpoints validate bounded pagination.
+- Sales and monthly sales include only fulfilled orders, filter/group by `fulfilled_at`, subtract return credit-note totals, and use business-timezone calendar months. Empty chart months are zero-filled.
+- Inventory reports exclude inactive products and compute available stock as on-hand less reserved. Money outputs are serialized as exact decimal strings.
+- Added indexes aligned with report date/status filters and sales-return/employee lookups, and added index-definition tests.
+- Documented that dashboard date filters affect recent transactions; its current-month widget and 12-month chart use fixed calendar periods.
+
+### Tests passed
+
+- Focused report/index tests: 13 passed.
+- Complete backend suite: 359 passed.
+- Django system check: passed.
+- Python compilation, Postman JSON parse, Python line-length check, and `git diff --check`: passed.
+- Read-only MongoDB explain checks completed. The configured database selected existing `ix_sales_orders_status_created`, `ix_products_active_name`, and `ix_purchase_orders_status_created` indexes for supported predicates; employee, department, supplier, purchase-list, and recent-purchase plans still showed collection scans because the newly declared indexes are not present in that database.
+
+### Known problems and not implemented yet
+
+- No dependencies were installed.
+- The configured MongoDB database was not modified. The new report index declarations are not yet applied there; applying indexes can consume I/O/storage. Run `manage.py init_db` in the intended environment, then rerun the documented explain checks.
+- Low-stock sorting uses a calculated available quantity and may require an in-memory sort. Inventory/purchase aggregate totals scan their source collections by design.
+- No live seeded MongoDB report integration test was run because `MONGO_TEST_URI` is not configured. Seeded API tests use the in-memory fake; the explain checks were read-only against the configured MongoDB.
+
+### Next step
+
+- Apply the declared indexes to the intended MongoDB environment with the standard database initialization process, then repeat explain checks on representative production-sized data.
+
 ## 2026-10-30 — Employee and department API pages
 
 ### Files created

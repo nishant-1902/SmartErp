@@ -181,3 +181,35 @@ def test_audit_log_indexes_support_user_action_and_date_filters():
     assert indexes["ix_audit_actor_created"] == ("actor_id", "created_at")
     assert indexes["ix_audit_action_created"] == ("action", "created_at")
     assert indexes["ix_audit_created"] == ("created_at",)
+
+
+def test_report_indexes_support_report_filters_and_joins():
+    indexes = {
+        collection_name: {
+            index.name: tuple(field for field, _ in index.keys)
+            for index in definition.indexes
+        }
+        for collection_name, definition in COLLECTIONS.items()
+    }
+
+    assert indexes["employees"]["ix_employees_joining_date"] == ("joining_date",)
+    assert indexes["departments"]["ix_departments_created"] == ("created_at",)
+    assert indexes["products"]["ix_products_active_created"] == (
+        "is_active",
+        "created_at",
+    )
+    assert indexes["suppliers"]["ix_suppliers_created"] == ("created_at",)
+    assert indexes["purchase_orders"]["ix_purchase_orders_created"] == ("created_at",)
+    assert indexes["purchase_orders"]["ix_purchase_orders_updated"] == ("updated_at",)
+    assert indexes["purchase_orders"]["ix_purchase_orders_status_created"] == (
+        "status",
+        "created_at",
+    )
+    assert indexes["sales_orders"]["ix_sales_orders_status_fulfilled"] == (
+        "status",
+        "fulfilled_at",
+    )
+    assert indexes["sales_returns"]["ix_sales_returns_order_created"] == (
+        "sales_order_id",
+        "created_at",
+    )

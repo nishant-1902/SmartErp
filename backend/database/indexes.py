@@ -175,6 +175,7 @@ COLLECTIONS: dict[str, CollectionDefinition] = {
         indexes=(
             _index("uq_employees_code", ("employee_code", 1), unique=True),
             _index("uq_employees_email", ("email", 1), unique=True),
+            _index("ix_employees_joining_date", ("joining_date", -1)),
             _index(
                 "ix_employees_department_status",
                 ("department_id", 1),
@@ -202,6 +203,7 @@ COLLECTIONS: dict[str, CollectionDefinition] = {
             _index("uq_departments_code", ("code", 1), unique=True),
             _index("uq_departments_name", ("name_search", 1), unique=True),
             _index("ix_departments_active_name", ("is_active", 1), ("name_search", 1)),
+            _index("ix_departments_created", ("created_at", -1)),
         ),
     ),
     "products": CollectionDefinition(
@@ -238,6 +240,7 @@ COLLECTIONS: dict[str, CollectionDefinition] = {
             _index("uq_products_sku", ("sku", 1), unique=True),
             _index("ix_products_category_active", ("category", 1), ("is_active", 1)),
             _index("ix_products_active_name", ("is_active", 1), ("name_search", 1)),
+            _index("ix_products_active_created", ("is_active", 1), ("created_at", -1)),
         ),
     ),
     "stock_movements": CollectionDefinition(
@@ -302,6 +305,7 @@ COLLECTIONS: dict[str, CollectionDefinition] = {
         indexes=(
             _index("uq_suppliers_code", ("code", 1), unique=True),
             _index("ix_suppliers_status_name", ("status", 1), ("name_search", 1)),
+            _index("ix_suppliers_created", ("created_at", -1)),
         ),
     ),
     "purchase_orders": CollectionDefinition(
@@ -383,6 +387,8 @@ COLLECTIONS: dict[str, CollectionDefinition] = {
                 ("status", 1),
                 ("created_at", -1),
             ),
+            _index("ix_purchase_orders_created", ("created_at", -1)),
+            _index("ix_purchase_orders_updated", ("updated_at", -1)),
             _index(
                 "ix_purchase_orders_supplier_created",
                 ("supplier_id", 1),
@@ -583,6 +589,11 @@ COLLECTIONS: dict[str, CollectionDefinition] = {
                 "ix_sales_orders_status_created",
                 ("status", 1),
                 ("created_at", -1),
+            ),
+            _index(
+                "ix_sales_orders_status_fulfilled",
+                ("status", 1),
+                ("fulfilled_at", -1),
             ),
         ),
     ),

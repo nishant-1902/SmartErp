@@ -932,12 +932,111 @@ matches and it is rejected instead of overselling.
   backend console. Production email delivery is not configured.
 - **Status codes:** Request `200` or `400`; confirmation `200`, `400`, or `401`.
 
+## Reports
+
+Report endpoints require a bearer access token and `reports:read`, plus the
+permission for the data domain being requested. The dashboard returns only
+widgets allowed by the caller's permissions. `Super Admin` can see all widgets;
+other roles see only the totals, charts, and recent transactions for domains
+they may read.
+
+All report endpoints accept optional `date_from` and `date_to` values in
+`YYYY-MM-DD` form. The range is inclusive in `BUSINESS_TIMEZONE` (`Asia/Kolkata`
+by default) and is applied as a half-open UTC interval. Reversed dates,
+unknown fields, dotted keys, and `$`-prefixed query keys return `400`.
+List endpoints also accept `page` (default `1`) and `page_size` (default `20`,
+maximum `100`) and return pagination metadata.
+
+### Dashboard
+
+- **Method and URL:** `GET /api/reports/dashboard/`.
+- **Purpose:** Return permitted dashboard widgets: active employee,
+  department, product, supplier, and customer counts; low-stock count and
+  inventory totals; pending purchase-order count and purchase statistics;
+  fulfilled current-month sales net of returns; 12 months of sales chart data;
+  and up to 10 merged recent sales/purchase transactions.
+- **Permissions:** `reports:read`; each widget additionally requires its
+  corresponding read permission. Recent transactions include only domains the
+  caller may read. Date filters affect recent transactions; current-month and
+  chart periods are fixed calendar windows.
+- **Success (`200`):** Standard envelope containing `data.dashboard`.
+
+### Report lists and summaries
+
+| Method and URL | Data permission | Result |
+|---|---|---|
+| `GET /api/reports/sales/` | `sales:read` | Fulfilled sales with gross, return, and net totals |
+| `GET /api/reports/inventory/` | `products:read` and `stock:read` | Active product and stock quantity/cost totals |
+| `GET /api/reports/low-stock/` | `products:read` and `stock:read` | Active products whose available quantity is at/below minimum |
+| `GET /api/reports/employees/` | `employees:read` | Employee directory projection filtered by joining date |
+| `GET /api/reports/departments/` | `departments:read` | Departments with total and active employee counts |
+| `GET /api/reports/suppliers/` | `suppliers:read` | Supplier directory projection filtered by creation date |
+| `GET /api/reports/purchases/` | `purchase:read` | Purchase orders filtered by creation date |
+| `GET /api/reports/monthly-sales/` | `sales:read` | Fulfilled sales grouped by business calendar month |
+
+Every listed route also requires `reports:read`. Report responses use
+`data.<report_name>` and, for lists, `meta` pagination fields. Monthly sales
+fills months with no fulfilled orders with zero counts and `"0.00"` money
+strings. Sales include only `Fulfilled` orders, use `fulfilled_at` for date
+filters and month grouping, and subtract recorded return/credit-note totals.
+All report money values are exact decimal strings; no float conversion is
+performed. Inventory statistics describe current stock and are not historical
+as-of-date snapshots.
+
+### Aggregation indexes and explain results
+
+The application declares the following indexes in
+[`backend/database/indexes.py`](../backend/database/indexes.py):
+
+| Pipeline/query | Index |
+|---|---|
+| Employee joining-date filter and order | `ix_employees_joining_date` |
+| Department creation-date filter | `ix_departments_created` |
+| Supplier creation-date filter and order | `ix_suppliers_created` |
+| Active-product date filter / active product count | `ix_products_active_created` (active flag is the prefix) |
+| Purchase list by creation date | `ix_purchase_orders_created` |
+| Recent purchases by update date | `ix_purchase_orders_updated` |
+| Pending purchase count and status filters | `ix_purchase_orders_status_created` |
+| Fulfilled sales date range, chart, and recent sales | `ix_sales_orders_status_fulfilled` |
+| Sales-to-return `$lookup` | `ix_sales_returns_order_created` |
+| Department-to-employee `$lookup` | `ix_employees_department_status` |
+
+The product low-stock expression subtracts reserved stock and then orders by a
+computed available quantity; its active/date predicates can use
+`ix_products_active_created`, but MongoDB may use an in-memory sort. Inventory
+totals and purchase status totals are full-collection aggregations. The
+dashboard counts likewise use their relevant status/active index prefixes.
+
+MongoDB `explain("executionStats")` was run read-only against the configured
+database. The current database has older indexes and does not yet include all
+the declarations above:
+
+| Pipeline/query | Observed current plan |
+|---|---|
+| Sales list, monthly sales, recent sales | `IXSCAN` using `ix_sales_orders_status_created`; this filters status but does not support `fulfilled_at` bounds as intended |
+| Inventory and low stock | `IXSCAN` using `ix_products_active_name` for the active flag; low-stock expression/order is not indexable |
+| Employee list | `COLLSCAN` with `SORT`; no joining-date index was present |
+| Department list | Department `COLLSCAN`; employee lookup uses `ix_employees_department_status` |
+| Supplier list | `COLLSCAN` with `SORT`; no creation-date index was present |
+| Purchase list and recent purchases | `COLLSCAN` with `SORT`; their date indexes were not present |
+| Pending purchase count | `IXSCAN` using `ix_purchase_orders_status_created` |
+| Purchase status totals | `COLLSCAN`, expected for an all-status aggregation |
+| Active dashboard counts | Existing active/status index prefixes were selected |
+
+The report indexes are declared and covered by tests, but were not created in
+the configured database because it is not an isolated test database. Have an
+administrator apply the standard `manage.py init_db` command in the intended
+environment, then repeat `explain("executionStats")`; adding indexes can consume
+I/O and storage on an existing dataset. The winning plan still depends on data
+size and distribution.
+
 ## Postman
 
 Import [`postman/departments.postman_collection.json`](./postman/departments.postman_collection.json),
 [`postman/employees.postman_collection.json`](./postman/employees.postman_collection.json),
 [`postman/products.postman_collection.json`](./postman/products.postman_collection.json),
-and [`postman/stock.postman_collection.json`](./postman/stock.postman_collection.json).
+[`postman/stock.postman_collection.json`](./postman/stock.postman_collection.json),
+and [`postman/reports.postman_collection.json`](./postman/reports.postman_collection.json).
 Set collection variables `base_url` (for example `http://localhost:8000/api`)
 and role-appropriate `access_token`; the employee collection also uses
 `employee_access_token` for the self-profile request. The product collection

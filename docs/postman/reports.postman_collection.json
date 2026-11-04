@@ -1,0 +1,93 @@
+{
+  "info": {
+    "_postman_id": "f5012866-23bf-41dc-871c-76f93c8724ab",
+    "name": "SmartERP Reports",
+    "description": "Permission-checked reports. Set base_url and a role-appropriate access_token. List reports support date_from, date_to, page, and page_size.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000/api"
+    },
+    {
+      "key": "access_token",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Dashboard",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/reports/dashboard/?date_from=2026-01-01&date_to=2026-12-31"
+      }
+    },
+    {
+      "name": "Sales",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/reports/sales/?date_from=2026-01-01&date_to=2026-12-31&page=1&page_size=20"
+      }
+    },
+    {
+      "name": "Inventory",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/reports/inventory/"
+      }
+    },
+    {
+      "name": "Low stock",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/reports/low-stock/?page=1&page_size=20"
+      }
+    },
+    {
+      "name": "Employees",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/reports/employees/?date_from=2026-01-01&date_to=2026-12-31&page=1&page_size=20"
+      }
+    },
+    {
+      "name": "Departments",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/reports/departments/?date_from=2026-01-01&date_to=2026-12-31&page=1&page_size=20"
+      }
+    },
+    {
+      "name": "Suppliers",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/reports/suppliers/?date_from=2026-01-01&date_to=2026-12-31&page=1&page_size=20"
+      }
+    },
+    {
+      "name": "Purchases",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/reports/purchases/?date_from=2026-01-01&date_to=2026-12-31&page=1&page_size=20"
+      }
+    },
+    {
+      "name": "Monthly sales",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/reports/monthly-sales/?date_from=2026-01-01&date_to=2026-12-31&page=1&page_size=20"
+      }
+    }
+  ]
+}

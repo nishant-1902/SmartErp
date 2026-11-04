@@ -37,5 +37,6 @@ urlpatterns = [
     path("api/purchase-orders/", include("purchases.urls")),
     path("api/stock-adjustments/", include("inventory.stock_urls")),
     path("api/stock-movements/", include("inventory.movement_urls")),
+    path("api/reports/", include("reports.urls")),
     path("", api_root_not_found, name="api-root-not-found"),
 ]
