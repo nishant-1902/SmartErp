@@ -2093,3 +2093,51 @@
 ### Next step
 
 - Install MongoDB Database Tools and run `.\scripts\backup-db.ps1` against an explicitly selected local database. Configure a production mail provider and TLS-terminating reverse proxy before deploying. Suggested commit: `chore: prepare SmartERP for production`.
+
+## 2026-11-07 — Production deployment guide
+
+### Files created
+
+- None. The deployment guide already existed and was expanded for this step.
+
+### Files modified
+
+- `docs/deployment.md` — added neutral hosting comparisons for frontend, backend, and MongoDB; documented all relevant production and frontend build environment settings, `ALLOWED_HOSTS` versus CORS, same-site and cross-site refresh-cookie behavior, Caddy/Let's Encrypt and nginx/Certbot proxy guidance, private MongoDB authentication/network rules, explicit `mongodump`/`mongorestore` examples and restore-test steps, liveness versus database monitoring, error-tracking status, dependency-update policy, and a broader pre-launch checklist.
+- `docs/PROGRESS.md` — recorded this documentation step, validation commands/results, and remaining deployment work.
+
+### Dependencies installed
+
+- None. Documentation-only change.
+
+### Commands run and observed
+
+- `.\scripts\run-tests.ps1` — completed with exit code 0.
+- Django system check — `System check identified no issues (0 silenced).`
+- Backend tests — `377 passed in 8.13s`.
+- Backend coverage run — `377 passed in 9.67s`; overall coverage `92%` (8,611 statements, 653 missed).
+- Frontend tests — 41 test files and 116 tests passed.
+- Frontend lint — `npm run lint` completed with exit code 0 and no diagnostics.
+- Frontend production build — Vite transformed 980 modules and completed in 999 ms.
+- An initial PowerShell documentation-assertion command had a quoting parse error and made no changes; the corrected run passed all nine content checks.
+- `git diff --check` — passed with no whitespace errors.
+
+### Features completed
+
+- Clarified hosting trade-offs without assuming a provider or tier is free.
+- Documented that MongoDB must remain private and must never be exposed publicly.
+- Added operator steps for service supervision, TLS termination, environment configuration, backups/restores, monitoring, error handling, dependency maintenance, and launch readiness.
+
+### Tests passed
+
+- Full backend/frontend verification script passed; detailed command output is recorded above.
+- All nine targeted deployment-document content assertions passed.
+- Documentation diff whitespace check passed.
+
+### Known problems
+
+- Production hosting, TLS issuance, production secrets, monitored database readiness, backup tooling, restore drills, and error tracking still require operator/provider configuration and verification.
+- Production password-reset email delivery is not implemented/configured; see the production guidance above.
+
+### Next step
+
+- Configure and validate deployment infrastructure against the pre-launch checklist. Suggested commit: `docs: expand production deployment guide`.

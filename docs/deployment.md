@@ -28,13 +28,22 @@ connection URIs, or customer data.
 | `ALLOWED_HOSTS` | `localhost,127.0.0.1` | Exact public API hostnames; no `*` |
 | `MONGO_URI`, `MONGO_DB_NAME` | Local authenticated replica set | Private authenticated replica set/cluster |
 | `JWT_SECRET_KEY` | Local-only secret | Separate unique secret, at least 32 characters |
+| `JWT_ISSUER`, `JWT_AUDIENCE` | Development defaults | Set stable values for this deployment; tokens must use matching values |
+| `JWT_ACCESS_TOKEN_LIFETIME_SECONDS`, `JWT_REFRESH_TOKEN_LIFETIME_SECONDS` | Development defaults | Review against the security and reauthentication policy |
 | `CORS_ALLOWED_ORIGINS` | Exact local frontend origin | Exact HTTPS frontend origins; no wildcard |
-| `REFRESH_COOKIE_SECURE` | May be false for local HTTP | Always true |
-| `SECURE_SSL_REDIRECT` | False | True; only disable for local plaintext smoke tests |
+| `REFRESH_COOKIE_NAME`, `REFRESH_COOKIE_PATH` | Development defaults | Keep the path as narrow as the refresh routes permit |
+| `REFRESH_COOKIE_SECURE` | May be false for local HTTP | Forced true in production |
+| `REFRESH_COOKIE_HTTPONLY` | True | Keep true so browser JavaScript cannot read the refresh token |
+| `REFRESH_COOKIE_SAMESITE` | `Lax` | Use `Lax` for same-site deployments; see cookie guidance below |
+| `REFRESH_COOKIE_DOMAIN` | Unset | Prefer unset (host-only); set only when a reviewed design requires shared subdomains |
+| `SECURE_SSL_REDIRECT` | False | Defaults to true; only disable for local plaintext smoke tests |
 | `SECURE_HSTS_SECONDS` | 0 | Defaults to 31,536,000; must be positive |
-| `TRUST_X_FORWARDED_PROTO` | False | True only behind a trusted TLS-terminating proxy |
+| `SECURE_HSTS_INCLUDE_SUBDOMAINS`, `SECURE_HSTS_PRELOAD` | Development defaults | Enable only after confirming every covered hostname is HTTPS-ready |
+| `TRUST_X_FORWARDED_PROTO` | False | Enable only behind a trusted TLS-terminating proxy |
 | `LOG_FILE` | `backend/logs/smarterp.log` | Writable persistent protected file path |
-| `LOG_MAX_BYTES`, `LOG_BACKUP_COUNT`, `LOG_LEVEL` | Defaults | Tune for host storage and retention |
+| `LOG_MAX_BYTES`, `LOG_BACKUP_COUNT`, `LOG_LEVEL` | Defaults | Tune for host storage and retention; keep at least `INFO` in production |
+| `MONGO_TEST_URI`, `MONGO_TEST_DB_NAME` | Optional dedicated test database | Test/staging only; never point tests at production |
+| `VITE_API_BASE_URL` | `http://localhost:8000/api` | Frontend build-time public API URL; set before `npm run build`, never put secrets here |
 
 Copy `backend/.env.example` to an ignored `backend/.env`. Supply real secrets
 through a protected environment/secret manager or a file readable only by the
@@ -42,6 +51,58 @@ service account. Never commit `.env` or paste secret values into command lines,
 tickets, or logs. MongoDB URI reserved characters in credentials must be
 percent-encoded. The `MONGO_TEST_URI` must use a separate dedicated test
 database/user and must never point at production.
+
+`ALLOWED_HOSTS` is a comma-separated allowlist of hostnames from the HTTP
+`Host` header, without a scheme, path, or port (for example,
+`api.example.com`). Include every hostname that actually reaches Django; do
+not use `*`. It is independent of `CORS_ALLOWED_ORIGINS`, which lists complete
+browser origins (scheme + hostname + optional port), such as
+`https://erp.example.com`. If the browser calls `https://api.example.com`,
+allow `api.example.com` in `ALLOWED_HOSTS` and `https://erp.example.com` in
+`CORS_ALLOWED_ORIGINS`.
+
+### Hosting choices
+
+These are deployment patterns, not endorsements. Compare current provider
+pricing, support, data location, service limits, and recovery guarantees
+before choosing; none of these options is assumed to be free.
+
+| Component | Option | Trade-offs to evaluate |
+|---|---|---|
+| Frontend | Static hosting/CDN | Simple delivery of `frontend/dist/` and global caching; check custom-domain/TLS, SPA fallback, build/deploy integration, bandwidth and support costs. |
+| Frontend | Same Linux VPS as the API | One host and a same-origin `/api/` route can simplify cookies and CORS; you own patching, capacity, availability, TLS, backups and recovery. |
+| Frontend | PaaS static-site service | Managed builds and deploys can reduce server work; check build minutes, bandwidth, region, headers/SPA behavior, availability and pricing. |
+| Backend | Linux VPS with systemd + Gunicorn | Direct control over OS, network and process; requires you to operate patching, TLS proxy, monitoring, scaling, failover and recovery. |
+| Backend | PaaS application service | Managed deploys, restarts, logs and health probes may reduce operations; confirm Python/WSGI support, private outbound access to MongoDB, persistent-secret handling, worker limits, logs, regions, service limits and total cost. |
+| MongoDB | MongoDB Atlas | Managed replica-set operations, backups and monitoring options; select a suitable paid/service tier and region, configure database users and private connectivity/IP access lists, and check backup, retention, egress and support costs. |
+| MongoDB | Self-managed MongoDB on a private host/network | More control over topology and maintenance windows; you own replica-set operations, encryption, patching, monitoring, backup, restore drills and availability. Keep it private and do not expose its port publicly. |
+
+You can combine providers, but verify the network path between the backend and
+MongoDB before committing to the design. Keep the database on a private
+connection where available; if a provider requires an IP access list, allow
+only the backend's fixed egress addresses and approved administration paths.
+Do not open MongoDB to `0.0.0.0/0` or otherwise expose it to the public
+Internet.
+
+### Refresh-cookie and CORS choices
+
+The API enables credentialed CORS. Use exact origins, not `*`, and keep the
+refresh cookie `HttpOnly` and `Secure` in production. Prefer serving the
+frontend and API on the same origin (for example, route `/api/` through the
+same proxy) or on subdomains of the same registrable domain
+(`erp.example.com` and `api.example.com`). Those subdomains are cross-origin
+for CORS but are generally same-site for cookie `SameSite` handling; `Lax`
+is the configured default. Leave `REFRESH_COOKIE_DOMAIN` unset unless sharing
+the cookie across subdomains is a documented requirement.
+
+If frontend and API are on different registrable domains, the refresh cookie
+is cross-site: it generally needs `REFRESH_COOKIE_SAMESITE=None` and
+`REFRESH_COOKIE_SECURE=True`. Browser third-party-cookie restrictions can
+still block it. CORS is not a CSRF defense. Do not enable this arrangement
+until cookie-authenticated refresh requests have a reviewed and tested CSRF
+defense; if that is not available, use a same-site domain or reverse-proxy
+design instead. Keep credentialed requests enabled only where needed and
+verify login, refresh, logout, and rejected-origin behavior in a real browser.
 
 Production password-reset email delivery is **not configured**. The reset
 service intentionally refuses to issue a reset when `DEBUG=False`; integrate
@@ -154,6 +215,35 @@ server {
 }
 ```
 
+For Caddy, a minimal site definition can serve the built single-page app and
+proxy the API. With the domain pointed at this server and inbound ports 80/443
+permitted, Caddy obtains and renews publicly trusted HTTPS certificates
+automatically (using Let's Encrypt when applicable):
+
+```caddyfile
+erp.example.com {
+    encode zstd gzip
+
+    handle /api/* {
+        reverse_proxy 127.0.0.1:8000
+    }
+
+    handle {
+        root * /srv/smarterp/frontend/dist
+        try_files {path} /index.html
+        file_server
+    }
+}
+```
+
+For nginx, install/configure Certbot for the chosen Linux distribution and
+use its nginx integration (or an equivalent certificate-renewal workflow) to
+obtain and renew Let's Encrypt certificates. Validate automatic renewal
+before launch. In either case, allow inbound HTTP only as needed for
+certificate issuance/redirects and allow HTTPS; keep Gunicorn bound to
+loopback or a private socket. Never publish its application port or MongoDB's
+port.
+
 Set `TRUST_X_FORWARDED_PROTO=True` only when the API is reachable solely
 through a trusted proxy that overwrites `X-Forwarded-Proto`. Django then
 recognizes proxy HTTPS, applies HTTPS redirects correctly, and emits HSTS.
@@ -187,9 +277,11 @@ CSRF defenses before release. Never use wildcard CORS with credentials.
 
 - Use an authenticated MongoDB replica set because purchase/stock/sales
   workflows require transactions.
-- Keep the database on a private network. Allow database traffic only from
-  application hosts and approved administrative networks; never expose
-  MongoDB directly to the public Internet.
+- Require MongoDB authentication and TLS for remote connections. Keep the
+  database on a private network; bind/listen only on private interfaces and
+  allow database traffic only from backend hosts and approved administrative
+  networks using firewall rules or Atlas network access controls. Never
+  expose MongoDB directly to the public Internet.
 - Use a least-privilege application user scoped to the application database.
   Use a separate test account and database.
 - Review duplicate data before creating new unique indexes. Run the
@@ -215,40 +307,94 @@ required recovery-point objective; a successful dump alone is not proof of
 recoverability.
 
 For restore, use `mongorestore` with the matching private test or recovery
-cluster URI and the `--gzip` option. Restore into an isolated database/cluster
-first, verify expected collections/indexes and application workflows, and
-document the restoration result before relying on the backup. Never test a
-restore against the production database.
+cluster URI and the `--gzip` option. Example for tools installed on the Linux
+backup/operations host (substitute a private target URI and a new isolated
+database name):
 
-Monitor API process health, MongoDB availability/replica-set state, disk
-space, backup age, error rates, and log rotation. Use an error-tracking service
-only after reviewing data scrubbing and retention. Alert on repeated API
-errors and failed backups. The rotating Django log defaults to 10 MiB x five
-files; adapt it to host capacity and central log shipping/retention. Do not
-log bearer/refresh tokens, reset URLs, passwords, MongoDB URIs, or payment
-details.
+```bash
+# The URI identifies the cluster/database; --password prompts interactively.
+mongodump --uri="mongodb+srv://cluster.example.mongodb.net/smarterp?authSource=admin" \
+  --username="$MONGO_BACKUP_USER" --authenticationDatabase=admin --password \
+  --db=smarterp --gzip --out="/var/backups/smarterp/2026-11-07"
 
-Update pinned dependencies deliberately: review upstream security advisories,
-upgrade in a branch, run `.\scripts\run-tests.ps1` on Windows and the Linux
-production build/checks in CI, then deploy a tested artifact. Store and retain
-the lockfiles and release identifier with each deployment.
+# Restore only into an isolated recovery-test database/cluster.
+mongorestore --uri="mongodb+srv://recovery.example.mongodb.net/?authSource=admin" \
+  --username="$MONGO_RESTORE_USER" --authenticationDatabase=admin --password \
+  --gzip --nsFrom="smarterp.*" --nsTo="smarterp_restore_test.*" \
+  --drop "/var/backups/smarterp/2026-11-07/smarterp"
+```
+
+Use secure secret handling and a backup identity with only the required
+backup permissions; use a separate restore identity with the permissions
+needed for the isolated target. Store encrypted backups off-host with
+restricted access and documented retention. A successful dump is not proof
+that a backup can be restored. On a regular schedule, restore a recent backup
+to an isolated replica set/database, verify collections, validators and
+indexes, check representative records, run application checks and safe
+read/write workflow tests, record restore duration and outcome, and then
+destroy the isolated test data using your approved procedure. Never restore
+over production as a test.
+
+The public `GET /api/health/` endpoint is a **liveness** check only: it returns
+success when Django can answer and does not query MongoDB. Use it for process
+and reverse-proxy availability, but separately monitor MongoDB connection
+and replica-set state with a private authenticated probe or provider
+monitoring. A database-backed readiness check is not implemented by this
+endpoint. Monitor disk space, backup age, HTTP error/latency rates, worker
+restarts, certificate renewal and log rotation; alert on repeated API errors,
+database unavailability and failed/overdue backups.
+
+Centralize service/reverse-proxy logs where appropriate, restrict access and
+retention, and ensure the service account can write the configured `LOG_FILE`.
+The rotating Django log defaults to 10 MiB x five files; adapt it to host
+capacity and central log shipping/retention. Use an error-tracking service
+only after reviewing data scrubbing, access controls and retention. Error
+tracking is not configured in this repository. Do not log bearer/refresh
+tokens, reset URLs, passwords, MongoDB URIs, or payment/customer details.
+
+Review upstream security advisories continuously and schedule regular
+dependency reviews. Update pinned Python dependencies in
+`backend/requirements*.txt` and JavaScript dependencies through the frontend
+package manifest and lockfile in a dedicated branch; prioritize actively
+exploited or critical fixes, review release notes and breaking changes, then
+run backend tests, frontend tests/lint/build and Linux production checks in
+CI. Deploy a tested, identifiable artifact through staging with a rollback
+plan. Keep lockfiles and release identifiers with each deployment; do not
+silently float production dependencies.
 
 ## Pre-launch checklist
 
 - [ ] Production secrets are unique, strong, private, and not in source control.
-- [ ] `SMARTERP_ENV=production`, `DEBUG=False`, explicit `ALLOWED_HOSTS`, and
-  exact CORS origins are set.
+- [ ] `SMARTERP_ENV=production`, `DEBUG=False`, explicit `ALLOWED_HOSTS`, exact
+  CORS origins, and reviewed JWT issuer/audience/lifetimes are set.
+- [ ] The hosting choice, regions, network paths, capacity, provider limits,
+  costs, availability commitments, data location and recovery ownership are
+  understood for frontend, backend and MongoDB.
 - [ ] HTTPS redirect, trusted-proxy settings, secure cookies, HSTS, and
   security headers are verified through the public TLS endpoint.
+- [ ] Refresh cookie is `HttpOnly`, `Secure`, and has a deliberate `SameSite`
+  and domain/path; cross-site cookie use has tested CSRF protection and
+  browser compatibility.
 - [ ] Password-reset email provider and delivery/reuse/expiry tests are
   configured; reset tokens are never exposed in production logs.
-- [ ] Gunicorn/Waitress runs under a service supervisor; Django `runserver`
-  and Vite dev server are not used in production.
+- [ ] Linux Gunicorn runs under systemd or the selected PaaS supervisor,
+  bound privately behind the reverse proxy; Django `runserver`, Vite dev
+  server and public Gunicorn/Waitress ports are not used in production.
+- [ ] Reverse-proxy TLS certificate issuance and renewal are configured and
+  tested; only intended public ports are reachable.
 - [ ] Frontend was built with the intended public `VITE_API_BASE_URL`; SPA
   fallback and deep-link refresh work on the deployed static host.
-- [ ] MongoDB uses authentication, private networking, replica-set
-  transactions, least privilege, and tested backup/restore procedures.
+- [ ] MongoDB authentication, TLS, least privilege, private network/firewall
+  rules, replica-set transactions, and restricted administrator access are
+  verified; no MongoDB port is publicly reachable.
 - [ ] Collection validators/indexes are initialized and query/transaction
   checks have passed against a dedicated staging replica set.
-- [ ] Backend/frontend tests and lint/build pass; logs, monitoring, alerts,
-  error tracking, retention, and incident ownership are configured.
+- [ ] `init_db` completed against the intended database after index/data
+  compatibility review.
+- [ ] Encrypted off-host backups are scheduled, access-controlled, retained,
+  and a restore test to an isolated target has passed and been recorded.
+- [ ] Backend/frontend tests and lint/build pass; health/DB monitoring,
+  actionable alerts, log retention, error tracking (or an explicit decision
+  not to use it), and incident ownership are configured.
+- [ ] Dependency-update ownership, security-advisory review, staging checks,
+  release identification and rollback procedure are documented.
