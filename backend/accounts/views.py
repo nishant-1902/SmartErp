@@ -71,10 +71,7 @@ def mongo_database():
 
 
 def get_client_ip(request: Any) -> str:
-    """Return the best available client IP address for audit and rate-limit records."""
-    x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
-    if x_forwarded_for:
-        return x_forwarded_for.split(",")[0].strip()
+    """Return the direct peer IP without trusting client-supplied proxy headers."""
     return request.META.get("REMOTE_ADDR", "unknown")
 
 

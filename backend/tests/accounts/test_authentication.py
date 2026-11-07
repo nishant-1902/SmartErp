@@ -1,4 +1,5 @@
 from datetime import timedelta
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -12,6 +13,7 @@ from rest_framework.test import APIClient
 
 from accounts.authentication import AuthUser, MongoJWTAuthentication
 from accounts.tokens import create_access_token
+from accounts.views import get_client_ip
 from common.permissions import IsAuthenticatedMongo, has_permission, require
 from common.permissions_matrix import ROLE_PERMISSIONS
 from common.responses import success_response
@@ -198,6 +200,17 @@ def test_default_drf_settings_use_mongo_auth_and_authenticated_permission():
 
     assert auth_classes == [MongoJWTAuthentication]
     assert permission_classes == [IsAuthenticatedMongo]
+
+
+def test_login_client_ip_ignores_untrusted_forwarded_header():
+    request = SimpleNamespace(
+        META={
+            "HTTP_X_FORWARDED_FOR": "198.51.100.55, 203.0.113.8",
+            "REMOTE_ADDR": "192.0.2.10",
+        }
+    )
+
+    assert get_client_ip(request) == "192.0.2.10"
 
 
 def test_health_login_refresh_and_password_reset_are_public(client):

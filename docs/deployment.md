@@ -249,6 +249,14 @@ through a trusted proxy that overwrites `X-Forwarded-Proto`. Django then
 recognizes proxy HTTPS, applies HTTPS redirects correctly, and emits HSTS.
 Do not trust forwarded headers from arbitrary clients.
 
+Login lockout and audit attribution use Django's direct peer address
+(`REMOTE_ADDR`); the application does not trust `X-Forwarded-For` for that
+decision because clients can forge it unless every trusted proxy is
+configured and validated. Behind a reverse proxy, this may be the proxy's
+address, but the per-account lockout still applies. Do not change the
+application to trust a forwarded client address without a separately
+configured trusted-proxy boundary.
+
 Build the static frontend with the public API origin set **before** the build:
 
 ```powershell

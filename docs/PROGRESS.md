@@ -2141,3 +2141,94 @@
 ### Next step
 
 - Configure and validate deployment infrastructure against the pre-launch checklist. Suggested commit: `docs: expand production deployment guide`.
+
+## 2026-11-07 — Repository security review
+
+### Files created
+
+- `docs/security-review.md` — repository security review with severity-ranked findings and proposed fixes, complete route/permission inventory, control-by-control assessment, dependency audit results, and test/command outcomes.
+
+### Files modified
+
+- `docs/PROGRESS.md` — recorded the security-review documentation step and its validation status.
+
+### Dependencies installed
+
+- None. `pip-audit` was unavailable and was not installed.
+
+### Commands run and observed
+
+- Security-review backend suite: `.\venv\Scripts\python.exe -m pytest -q` from `backend\` — `377 passed in 67.30s`.
+- Security-review frontend suite: `npm test -- --run` from `frontend\` — exit 1, 40 test files passed and 1 failed; 115 tests passed and 1 failed due to a 5-second timeout in `PurchaseOrderForm.test.jsx`.
+- Focused frontend retry: `npx vitest run src/pages/PurchaseOrderForm.test.jsx` — `1 passed in 3.01s`.
+- Django check: `.\venv\Scripts\python.exe manage.py check` — `System check identified no issues (0 silenced).`
+- `npm audit --json` from `frontend\` — exit 1; 2 moderate advisories, 0 high and 0 critical, both via React Router (open redirect and SSR hydration constructor injection advisories).
+- Root-level `npm audit --json` — exit 1 with `ENOLOCK`; no root package lockfile. Frontend audit was then run from the correct directory.
+- `pip-audit` — command not found; audit not run and dependency not installed.
+- A prior git status/diff check during review was clean; review agent made no changes.
+
+### Features completed
+
+- Documented authentication/token and cookie/CSRF controls, rate-limit gaps, RBAC for every route, NoSQL/ObjectId/PATCH checks, error leakage, secrets/history checks, dependency advisories, CORS/security headers, audit coverage, and transaction/idempotency coverage.
+- Identified no Critical or High issues; recorded three Medium issues (login lockout bypass, sales return idempotency gap, and two moderate dependency advisories grouped as one finding) and one Low audit-log coverage finding.
+
+### Tests passed
+
+- Backend: 377 passed.
+- Django system check: passed.
+- Focused rerun of the frontend test that timed out: 1 passed.
+- Full frontend test run was not clean: one timeout failure; see commands and known problems.
+
+### Known problems
+
+- No application fixes were made; approval is required before proceeding to remediation.
+- `pip-audit` is not installed, so Python dependency advisories were not checked.
+- Full frontend test run had one timeout although the focused retry passed.
+- Live MongoDB replica-set, deployment proxy, and production browser-cookie behavior were not verified.
+
+### Next step
+
+- Wait for user approval before addressing any findings. Suggested commit: `docs: add repository security review`.
+
+## 2026-11-07 — Fixing security finding SEC-01
+
+### Files created
+
+- None.
+
+### Files modified
+
+- `backend/accounts/views.py` — stopped trusting the client-controlled `X-Forwarded-For` header when deriving the login lockout and audit peer address; use `REMOTE_ADDR`.
+- `backend/tests/accounts/test_authentication.py` — added a regression test proving a forged forwarded address is ignored.
+- `docs/deployment.md` — documented that the application uses the direct peer address and does not trust forwarded client IP headers.
+- `docs/security-review.md` — recorded the remediation status for SEC-01.
+- `docs/PROGRESS.md` — recorded this approved, one-finding remediation step.
+
+### Dependencies installed
+
+- None.
+
+### Commands run and observed
+
+- The first pytest invocation used a repository-root-relative path and failed with PowerShell `CommandNotFoundException`; rerunning from `backend\` fixed the invocation.
+- From `backend\`: `.\venv\Scripts\python.exe -m pytest -q tests\accounts\test_authentication.py` — `17 passed in 0.32s`.
+- From `backend\`: `.\venv\Scripts\python.exe -m pytest -q tests\accounts\test_authentication.py tests\accounts\test_auth_service_rules.py` — `24 passed in 1.12s`.
+- Final rerun after the test cleanup: same targeted suites — `24 passed in 1.00s`.
+- `git diff --check` — passed with no whitespace errors.
+
+### Features completed
+
+- Removed the login lockout bypass caused by trusting a request-supplied `X-Forwarded-For` value. No new trusted-proxy configuration or dependency was added.
+
+### Tests passed
+
+- Authentication and login-lockout suites: 24 passed.
+- `git diff --check`: passed.
+
+### Known problems
+
+- When deployed behind a proxy, `REMOTE_ADDR` may be the proxy address. The lockout still keys by account and remains effective against changing client-supplied forwarding headers, but per-public-IP attribution is not available until a trusted proxy-address design is configured.
+
+### Next step
+
+- Wait for approval before addressing another finding. Suggested commit: `fix: ignore untrusted forwarded IP for login lockout`.
