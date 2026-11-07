@@ -6,3 +6,5 @@ pytest==9.2.0
 pytest-django==4.14.0
 # Adds coverage reporting to pytest.
 pytest-cov==7.1.0
+# Generates synthetic-only MongoDB performance data for local benchmarking.
+Faker==40.44.0

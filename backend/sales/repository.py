@@ -9,6 +9,7 @@ from pymongo.database import Database
 from pymongo.errors import DuplicateKeyError
 
 from common.money import to_decimal128
+from common.mongo import count_query_matches
 from common.object_id import parse_object_id
 from common.time import utc_now
 
@@ -215,7 +216,7 @@ def count_sales_orders(
         query["payment_status"] = payment_status
     if customer_id is not None:
         query["customer_id"] = customer_id
-    return database["sales_orders"].count_documents(query)
+    return count_query_matches(database["sales_orders"], query)
 
 
 def update_draft_sales_order(
@@ -387,7 +388,7 @@ def count_invoices(
         query["customer_id"] = customer_id
     if sales_order_id is not None:
         query["sales_order_id"] = sales_order_id
-    return database["invoices"].count_documents(query)
+    return count_query_matches(database["invoices"], query)
 
 
 def insert_payment(
@@ -496,7 +497,7 @@ def count_payments(
         query["method"] = method
     if status is not None:
         query["status"] = status
-    return database["payments"].count_documents(query)
+    return count_query_matches(database["payments"], query)
 
 
 def insert_sales_return(

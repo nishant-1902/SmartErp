@@ -106,7 +106,7 @@ describe('Home', () => {
     expect(await screen.findByText('Active employees')).toBeInTheDocument()
     expect(screen.getByText('12')).toBeInTheDocument()
     expect(screen.getByText('Sales this month')).toBeInTheDocument()
-    expect(screen.getByText('Monthly sales')).toBeInTheDocument()
+    expect(await screen.findByText('Monthly sales')).toBeInTheDocument()
     expect(screen.getByText('Purchase commitments vs net sales')).toBeInTheDocument()
     expect(screen.getByText('Available inventory by category')).toBeInTheDocument()
     expect(screen.getByText('Wrench')).toBeInTheDocument()

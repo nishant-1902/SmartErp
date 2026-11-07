@@ -110,11 +110,19 @@ def insert_product(database, **overrides):
         "quantity_on_hand": 0,
         "reserved_quantity": 0,
         "min_stock_level": 5,
+        "available_quantity": 0,
+        "is_low_stock": True,
         "is_active": True,
         "created_at": now,
         "updated_at": now,
     }
     product.update(overrides)
+    product["available_quantity"] = (
+        product["quantity_on_hand"] - product["reserved_quantity"]
+    )
+    product["is_low_stock"] = (
+        product["available_quantity"] <= product["min_stock_level"]
+    )
     database["products"].insert_one(product)
     return product
 
@@ -266,6 +274,28 @@ def test_patch_updates_editable_fields_and_decimal128_values(client, products_ap
     assert isinstance(stored["selling_price"], Decimal128)
     assert stored["selling_price"].to_decimal() == Decimal("3.75")
     assert stored["quantity_on_hand"] == 0
+
+
+def test_patch_recalculates_materialized_low_stock_value(client, products_api):
+    inventory_manager = insert_user(products_api, "inventory_manager")
+    product = insert_product(
+        products_api,
+        quantity_on_hand=8,
+        reserved_quantity=1,
+        min_stock_level=3,
+    )
+
+    response = client.patch(
+        f"/api/products/{product['_id']}/",
+        {"min_stock_level": 7},
+        format="json",
+        **auth_headers(inventory_manager),
+    )
+
+    assert response.status_code == 200
+    stored = products_api["products"].find_one({"_id": product["_id"]})
+    assert stored["available_quantity"] == 7
+    assert stored["is_low_stock"] is True
 
 
 def test_product_search_filters_sorting_and_pagination(client, products_api):

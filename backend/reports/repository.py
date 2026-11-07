@@ -6,12 +6,8 @@ from typing import Any
 from bson.decimal128 import Decimal128
 from pymongo.database import Database
 
-LOW_STOCK_EXPRESSION = {
-    "$lte": [
-        {"$subtract": ["$quantity_on_hand", "$reserved_quantity"]},
-        "$min_stock_level",
-    ]
-}
+from common.mongo import count_query_matches
+
 PENDING_PURCHASE_STATUSES = [
     "pending_approval",
     "approved",
@@ -34,7 +30,13 @@ def count_documents(
     query: dict[str, Any],
 ) -> int:
     """Count indexed documents matching a fixed, service-owned report query."""
-    values = list(database[collection_name].aggregate([{"$match": query}, {"$count": "count"}]))
+    if not query:
+        return count_query_matches(database[collection_name], query)
+    values = list(
+        database[collection_name].aggregate(
+            [{"$match": query}, {"$count": "count"}]
+        )
+    )
     return values[0]["count"] if values else 0
 
 
@@ -65,6 +67,9 @@ def list_sales_orders(
     match = {"status": "fulfilled", **_date_match("fulfilled_at", start, end)}
     pipeline = [
         {"$match": match},
+        {"$sort": {"fulfilled_at": -1, "_id": 1}},
+        {"$skip": skip},
+        {"$limit": limit},
         {
             "$lookup": {
                 "from": "sales_returns",
@@ -84,9 +89,6 @@ def list_sales_orders(
                 },
             }
         },
-        {"$sort": {"fulfilled_at": -1, "_id": 1}},
-        {"$skip": skip},
-        {"$limit": limit},
         {
             "$project": {
                 "_id": 1,
@@ -186,7 +188,7 @@ def product_inventory_statistics(database: Database[Any]) -> dict[str, Any]:
                             }
                         },
                         "low_stock_count": {
-                            "$sum": {"$cond": [LOW_STOCK_EXPRESSION, 1, 0]}
+                            "$sum": {"$cond": ["$is_low_stock", 1, 0]}
                         },
                         "stock_cost_value": {
                             "$sum": {
@@ -298,17 +300,10 @@ def list_low_stock(
     match = {
         "is_active": True,
         **_date_match("created_at", start, end),
-        "$expr": LOW_STOCK_EXPRESSION,
+        "is_low_stock": True,
     }
     pipeline = [
         {"$match": match},
-        {
-            "$addFields": {
-                "available_quantity": {
-                    "$subtract": ["$quantity_on_hand", "$reserved_quantity"]
-                }
-            }
-        },
         {"$sort": {"available_quantity": 1, "_id": 1}},
         {"$skip": skip},
         {"$limit": limit},
@@ -345,12 +340,15 @@ def list_report_documents(
     pipeline_stages: list[dict[str, Any]] | None = None,
 ) -> tuple[list[dict[str, Any]], int]:
     """Return one projected page and a matching-document total."""
-    pipeline = [{"$match": match}, *(pipeline_stages or [])]
+    pipeline = [
+        {"$match": match},
+        {"$sort": sort},
+        {"$skip": skip},
+        {"$limit": limit},
+        *(pipeline_stages or []),
+    ]
     pipeline.extend(
         [
-            {"$sort": sort},
-            {"$skip": skip},
-            {"$limit": limit},
             {"$project": projection},
         ]
     )
@@ -512,7 +510,8 @@ def purchase_statistics(database: Database[Any]) -> list[dict[str, Any]]:
                     }
                 },
                 {"$sort": {"_id": 1}},
-            ]
+            ],
+            hint="ix_purchase_orders_status_total",
         )
     )
 
@@ -532,6 +531,8 @@ def recent_sales(
                 **_date_match("fulfilled_at", start, end),
             }
         },
+        {"$sort": {"fulfilled_at": -1, "_id": 1}},
+        {"$limit": limit},
         {
             "$lookup": {
                 "from": "sales_returns",
@@ -550,8 +551,6 @@ def recent_sales(
                 }
             }
         },
-        {"$sort": {"fulfilled_at": -1, "_id": 1}},
-        {"$limit": limit},
         {
             "$project": {
                 "_id": 1,

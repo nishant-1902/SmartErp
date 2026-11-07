@@ -133,6 +133,7 @@ COLLECTIONS: dict[str, CollectionDefinition] = {
             ),
             _index("ix_users_active_created", ("is_active", 1), ("created_at", -1)),
             _index("ix_users_role_active", ("role", 1), ("is_active", 1)),
+            _index("ix_users_created_page", ("created_at", -1), ("_id", 1)),
         ),
     ),
     "employees": CollectionDefinition(
@@ -182,6 +183,23 @@ COLLECTIONS: dict[str, CollectionDefinition] = {
                 ("status", 1),
             ),
             _index("ix_employees_status_name", ("status", 1), ("name_search", 1)),
+            _index(
+                "ix_employees_created_page",
+                ("created_at", -1),
+                ("_id", 1),
+            ),
+            _index(
+                "ix_employees_joining_page",
+                ("joining_date", -1),
+                ("_id", 1),
+            ),
+            _index(
+                "ix_employees_department_created_page",
+                ("department_id", 1),
+                ("created_at", -1),
+                ("_id", 1),
+            ),
+            _index("ix_employees_designation", ("designation", 1)),
         ),
     ),
     "departments": CollectionDefinition(
@@ -204,6 +222,11 @@ COLLECTIONS: dict[str, CollectionDefinition] = {
             _index("uq_departments_name", ("name_search", 1), unique=True),
             _index("ix_departments_active_name", ("is_active", 1), ("name_search", 1)),
             _index("ix_departments_created", ("created_at", -1)),
+            _index(
+                "ix_departments_created_page",
+                ("created_at", -1),
+                ("_id", 1),
+            ),
         ),
     ),
     "products": CollectionDefinition(
@@ -231,6 +254,8 @@ COLLECTIONS: dict[str, CollectionDefinition] = {
                 "quantity_on_hand": {"bsonType": ["int", "long"], "minimum": 0},
                 "reserved_quantity": {"bsonType": ["int", "long"], "minimum": 0},
                 "min_stock_level": {"bsonType": ["int", "long"], "minimum": 0},
+                "available_quantity": {"bsonType": ["int", "long"], "minimum": 0},
+                "is_low_stock": {"bsonType": "bool"},
                 "is_active": {"bsonType": "bool"},
                 "created_at": {"bsonType": "date"},
                 "updated_at": {"bsonType": "date"},
@@ -241,6 +266,29 @@ COLLECTIONS: dict[str, CollectionDefinition] = {
             _index("ix_products_category_active", ("category", 1), ("is_active", 1)),
             _index("ix_products_active_name", ("is_active", 1), ("name_search", 1)),
             _index("ix_products_active_created", ("is_active", 1), ("created_at", -1)),
+            _index("ix_products_created_page", ("created_at", -1), ("_id", 1)),
+            _index(
+                "ix_products_low_stock_created",
+                ("is_low_stock", 1),
+                ("created_at", -1),
+                ("_id", 1),
+            ),
+            _index(
+                "ix_products_active_low_stock_available",
+                ("is_active", 1),
+                ("is_low_stock", 1),
+                ("available_quantity", 1),
+                ("_id", 1),
+            ),
+            _index(
+                "ix_products_inventory_summary",
+                ("is_active", 1),
+                ("category", 1),
+                ("is_low_stock", 1),
+                ("quantity_on_hand", 1),
+                ("reserved_quantity", 1),
+                ("cost_price", 1),
+            ),
         ),
     ),
     "stock_movements": CollectionDefinition(
@@ -276,8 +324,19 @@ COLLECTIONS: dict[str, CollectionDefinition] = {
         ),
         indexes=(
             _index("ix_stock_product_created", ("product_id", 1), ("created_at", -1)),
+            _index(
+                "ix_stock_product_created_page",
+                ("product_id", 1),
+                ("created_at", -1),
+                ("_id", -1),
+            ),
             _index("ix_stock_reference", ("reference_type", 1), ("reference_id", 1)),
             _index("ix_stock_created", ("created_at", -1)),
+            _index(
+                "ix_stock_created_page",
+                ("created_at", -1),
+                ("_id", -1),
+            ),
         ),
     ),
     "suppliers": CollectionDefinition(
@@ -306,6 +365,11 @@ COLLECTIONS: dict[str, CollectionDefinition] = {
             _index("uq_suppliers_code", ("code", 1), unique=True),
             _index("ix_suppliers_status_name", ("status", 1), ("name_search", 1)),
             _index("ix_suppliers_created", ("created_at", -1)),
+            _index(
+                "ix_suppliers_created_page",
+                ("created_at", -1),
+                ("_id", 1),
+            ),
         ),
     ),
     "purchase_orders": CollectionDefinition(
@@ -387,12 +451,39 @@ COLLECTIONS: dict[str, CollectionDefinition] = {
                 ("status", 1),
                 ("created_at", -1),
             ),
+            _index(
+                "ix_purchase_orders_status_created_page",
+                ("status", 1),
+                ("created_at", -1),
+                ("_id", 1),
+            ),
             _index("ix_purchase_orders_created", ("created_at", -1)),
             _index("ix_purchase_orders_updated", ("updated_at", -1)),
+            _index(
+                "ix_purchase_orders_created_page",
+                ("created_at", -1),
+                ("_id", 1),
+            ),
+            _index(
+                "ix_purchase_orders_updated_page",
+                ("updated_at", -1),
+                ("_id", 1),
+            ),
+            _index(
+                "ix_purchase_orders_status_total",
+                ("status", 1),
+                ("grand_total", 1),
+            ),
             _index(
                 "ix_purchase_orders_supplier_created",
                 ("supplier_id", 1),
                 ("created_at", -1),
+            ),
+            _index(
+                "ix_purchase_orders_supplier_created_page",
+                ("supplier_id", 1),
+                ("created_at", -1),
+                ("_id", 1),
             ),
         ),
     ),
@@ -495,6 +586,11 @@ COLLECTIONS: dict[str, CollectionDefinition] = {
                 partial={"tax_id": {"$type": "string"}},
             ),
             _index("ix_customers_status_name", ("status", 1), ("name_search", 1)),
+            _index(
+                "ix_customers_created_page",
+                ("created_at", -1),
+                ("_id", 1),
+            ),
         ),
     ),
     "sales_orders": CollectionDefinition(
@@ -586,6 +682,12 @@ COLLECTIONS: dict[str, CollectionDefinition] = {
                 ("created_at", -1),
             ),
             _index(
+                "ix_sales_orders_customer_created_page",
+                ("customer_id", 1),
+                ("created_at", -1),
+                ("_id", 1),
+            ),
+            _index(
                 "ix_sales_orders_status_created",
                 ("status", 1),
                 ("created_at", -1),
@@ -594,6 +696,23 @@ COLLECTIONS: dict[str, CollectionDefinition] = {
                 "ix_sales_orders_status_fulfilled",
                 ("status", 1),
                 ("fulfilled_at", -1),
+            ),
+            _index(
+                "ix_sales_orders_created_page",
+                ("created_at", -1),
+                ("_id", 1),
+            ),
+            _index(
+                "ix_sales_orders_status_created_page",
+                ("status", 1),
+                ("created_at", -1),
+                ("_id", 1),
+            ),
+            _index(
+                "ix_sales_orders_status_fulfilled_page",
+                ("status", 1),
+                ("fulfilled_at", -1),
+                ("_id", 1),
             ),
         ),
     ),
@@ -633,6 +752,18 @@ COLLECTIONS: dict[str, CollectionDefinition] = {
                 ("created_at", -1),
             ),
             _index("ix_payments_customer_status", ("customer_id", 1), ("status", 1)),
+            _index(
+                "ix_payments_customer_status_received",
+                ("customer_id", 1),
+                ("status", 1),
+                ("received_at", -1),
+                ("_id", 1),
+            ),
+            _index(
+                "ix_payments_received_page",
+                ("received_at", -1),
+                ("_id", 1),
+            ),
         ),
     ),
     "invoices": CollectionDefinition(
@@ -698,6 +829,17 @@ COLLECTIONS: dict[str, CollectionDefinition] = {
                 "ix_invoices_customer_issued",
                 ("customer_id", 1),
                 ("issued_at", -1),
+            ),
+            _index(
+                "ix_invoices_customer_issued_page",
+                ("customer_id", 1),
+                ("issued_at", -1),
+                ("_id", 1),
+            ),
+            _index(
+                "ix_invoices_issued_page",
+                ("issued_at", -1),
+                ("_id", 1),
             ),
         ),
     ),
@@ -804,6 +946,11 @@ COLLECTIONS: dict[str, CollectionDefinition] = {
             _index("ix_audit_actor_created", ("actor_id", 1), ("created_at", -1)),
             _index("ix_audit_action_created", ("action", 1), ("created_at", -1)),
             _index("ix_audit_created", ("created_at", -1)),
+            _index(
+                "ix_audit_created_page",
+                ("created_at", -1),
+                ("_id", -1),
+            ),
         ),
     ),
     "refresh_tokens": CollectionDefinition(

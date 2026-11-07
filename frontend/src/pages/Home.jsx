@@ -1,46 +1,20 @@
-import { useEffect, useMemo, useState } from 'react'
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  Legend,
-  Line,
-  LineChart,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import DataTable from '../components/DataTable.jsx'
 import DashboardCard from '../components/DashboardCard.jsx'
 import DashboardWidget from '../components/DashboardWidget.jsx'
+import LoadingSpinner from '../components/LoadingSpinner.jsx'
 import { useAuth } from '../hooks/useAuth.js'
 import { getDashboard } from '../services/reportsService.js'
 import { getApiError } from '../utils/apiErrors.js'
 import { formatMoney } from '../utils/formatMoney.js'
 
-const chartColors = ['#3157d5', '#16a085', '#e67e22', '#8e44ad', '#d64550']
+const DashboardCharts = lazy(() => import('../components/DashboardCharts.jsx'))
 
 function formatDate(value) {
   const parsed = new Date(value)
   return Number.isNaN(parsed.getTime())
     ? '—'
     : new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(parsed)
-}
-
-function chartMoneyTick(value) {
-  return Number(value).toLocaleString(undefined, {
-    maximumFractionDigits: 0,
-  })
-}
-
-function tooltipMoney(value, name, payload, dataKey) {
-  const sourceKey = dataKey?.replace(/_chart$/, '')
-  const exactValue = payload?.[sourceKey] ?? String(value ?? 0)
-  return [formatMoney(exactValue), name]
 }
 
 /**
@@ -51,6 +25,8 @@ function tooltipMoney(value, name, payload, dataKey) {
 export default function Home() {
   const { hasPermission } = useAuth()
   const canReadReports = hasPermission('reports:read')
+  const canReadSales = hasPermission('sales:read')
+  const canReadPurchases = hasPermission('purchase:read')
   const [dashboard, setDashboard] = useState(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
@@ -73,26 +49,6 @@ export default function Home() {
       })
     return () => controller.abort()
   }, [canReadReports, retryKey])
-
-  const salesChartData = useMemo(
-    () =>
-      (dashboard?.sales_chart ?? []).map((month) => ({
-        ...month,
-        gross_sales_chart: Number(month.gross_sales),
-        net_sales_chart: Number(month.net_sales),
-      })),
-    [dashboard],
-  )
-
-  const comparisonData = useMemo(
-    () =>
-      (dashboard?.purchases_vs_sales ?? []).map((month) => ({
-        ...month,
-        purchase_total_chart: Number(month.purchase_total),
-        net_sales_chart: Number(month.net_sales),
-      })),
-    [dashboard],
-  )
 
   const retry = () => {
     setError('')
@@ -149,6 +105,10 @@ export default function Home() {
         dashboard?.[metric.key] !== undefined ||
         dashboard?.widget_errors?.[metric.key] !== undefined),
   )
+  const canReadInventory =
+    hasPermission('stock:read') && hasPermission('products:read')
+  const hasDashboardCharts =
+    hasPermission('sales:read') || canReadInventory
 
   return (
     <section>
@@ -202,124 +162,43 @@ export default function Home() {
           )}
       </div>
 
-      {hasPermission('sales:read') && (
+      {hasDashboardCharts && !dashboard && loading && (
         <div className="row g-3 mb-3">
-          <div className="col-12 col-xl-6">
-            <DashboardWidget
-              available={dashboard?.sales_chart !== undefined}
-              error={widgetError('sales_chart')}
-              loading={loading}
-              onRetry={retry}
-              title="Monthly sales"
-            >
-              <div className="surface-card dashboard-chart p-3">
-                <h2 className="h6 mb-3">Monthly sales</h2>
-                {salesChartData.length === 0 ? (
-                  <p className="text-muted mb-0">No monthly sales data returned.</p>
-                ) : (
-                  <ResponsiveContainer height={280} width="100%">
-                    <LineChart data={salesChartData}>
-                      <CartesianGrid stroke="#e8edf5" strokeDasharray="3 3" />
-                      <XAxis dataKey="month" />
-                      <YAxis tickFormatter={chartMoneyTick} />
-                      <Tooltip formatter={(value, name, item) =>
-                        tooltipMoney(value, name, item.payload, item.dataKey)
-                      } />
-                      <Legend />
-                      <Line
-                        dataKey="gross_sales_chart"
-                        name="Gross sales"
-                        stroke={chartColors[0]}
-                        strokeWidth={2}
-                        type="monotone"
-                      />
-                      <Line
-                        dataKey="net_sales_chart"
-                        name="Net sales"
-                        stroke={chartColors[1]}
-                        strokeWidth={2}
-                        type="monotone"
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                )}
-              </div>
-            </DashboardWidget>
-          </div>
-          {hasPermission('purchase:read') && (
+          {canReadSales && (
             <div className="col-12 col-xl-6">
-              <DashboardWidget
-                available={dashboard?.purchases_vs_sales !== undefined}
-                error={widgetError('purchases_vs_sales')}
-                loading={loading}
-                onRetry={retry}
-                title="Purchases versus sales"
-              >
-                <div className="surface-card dashboard-chart p-3">
-                  <h2 className="h6 mb-3">Purchase commitments vs net sales</h2>
-                  {comparisonData.length === 0 ? (
-                    <p className="text-muted mb-0">No comparison data returned.</p>
-                  ) : (
-                    <ResponsiveContainer height={280} width="100%">
-                      <BarChart data={comparisonData}>
-                        <CartesianGrid stroke="#e8edf5" strokeDasharray="3 3" />
-                        <XAxis dataKey="month" />
-                        <YAxis tickFormatter={chartMoneyTick} />
-                        <Tooltip formatter={(value, name, item) =>
-                          tooltipMoney(value, name, item.payload, item.dataKey)
-                        } />
-                        <Legend />
-                        <Bar dataKey="purchase_total_chart" fill={chartColors[2]} name="Purchases" />
-                        <Bar dataKey="net_sales_chart" fill={chartColors[0]} name="Net sales" />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  )}
-                  <p className="small text-muted mb-0">
-                    Purchases use non-draft purchase-order totals by creation month.
-                  </p>
-                </div>
-              </DashboardWidget>
+              <DashboardWidget loading title="Monthly sales" />
+            </div>
+          )}
+          {canReadInventory && (
+            <div className="col-12 col-xl-6">
+              <DashboardWidget loading title="Inventory by category" />
             </div>
           )}
         </div>
       )}
 
-      {hasPermission('stock:read') && hasPermission('products:read') && (
+      {hasDashboardCharts && (dashboard || error) && (
+        <Suspense
+          fallback={
+            <div className="surface-card p-3">
+              <LoadingSpinner label="Loading dashboard charts" />
+            </div>
+          }
+        >
+          <DashboardCharts
+            canReadInventory={canReadInventory}
+            canReadPurchases={canReadPurchases}
+            canReadSales={canReadSales}
+            dashboard={dashboard ?? {}}
+            loading={loading}
+            onRetry={retry}
+            widgetError={widgetError}
+          />
+        </Suspense>
+      )}
+
+      {canReadInventory && (dashboard || error) && (
         <div className="row g-3 mb-3">
-          <div className="col-12 col-xl-6">
-            <DashboardWidget
-              available={dashboard?.inventory_by_category !== undefined}
-              error={widgetError('inventory_by_category')}
-              loading={loading}
-              onRetry={retry}
-              title="Inventory by category"
-            >
-              <div className="surface-card dashboard-chart p-3">
-                <h2 className="h6 mb-3">Available inventory by category</h2>
-                {dashboard?.inventory_by_category?.length === 0 ? (
-                  <p className="text-muted mb-0">No active inventory was returned.</p>
-                ) : (
-                  <ResponsiveContainer height={280} width="100%">
-                    <PieChart>
-                      <Pie
-                        data={dashboard?.inventory_by_category ?? []}
-                        dataKey="available_quantity"
-                        nameKey="category"
-                        outerRadius={95}
-                        label={({ name, value }) => `${name}: ${value}`}
-                      >
-                        {(dashboard?.inventory_by_category ?? []).map((entry, index) => (
-                          <Cell fill={chartColors[index % chartColors.length]} key={entry.category} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                      <Legend />
-                    </PieChart>
-                  </ResponsiveContainer>
-                )}
-              </div>
-            </DashboardWidget>
-          </div>
           <div className="col-12 col-xl-6">
             <DashboardWidget
               available={dashboard?.low_stock_products !== undefined}
@@ -341,7 +220,7 @@ export default function Home() {
         </div>
       )}
 
-      {(hasPermission('sales:read') || hasPermission('purchase:read')) && (
+      {(canReadSales || canReadPurchases) && (
         <DashboardWidget
           available={dashboard?.recent_transactions !== undefined}
           error={widgetError('recent_transactions')}

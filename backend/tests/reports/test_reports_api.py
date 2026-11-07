@@ -302,6 +302,7 @@ def seed_data(database, *, include_current_month_sale=False):
         "_id": ObjectId(), "sku": "STOCK-1", "name": "Available",
         "category": "Tools", "unit": "each", "quantity_on_hand": 10,
         "reserved_quantity": 2, "min_stock_level": 3,
+        "available_quantity": 8, "is_low_stock": False,
         "cost_price": Decimal128("2.50"), "is_active": True,
         "created_at": now,
     })
@@ -309,6 +310,7 @@ def seed_data(database, *, include_current_month_sale=False):
         "_id": ObjectId(), "sku": "STOCK-2", "name": "Low",
         "category": "Tools", "unit": "each", "quantity_on_hand": 4,
         "reserved_quantity": 1, "min_stock_level": 3,
+        "available_quantity": 3, "is_low_stock": True,
         "cost_price": Decimal128("5.00"), "is_active": True,
         "created_at": now,
     })
@@ -316,6 +318,7 @@ def seed_data(database, *, include_current_month_sale=False):
         "_id": ObjectId(), "sku": "STOCK-3", "name": "Inactive",
         "category": "Tools", "unit": "each", "quantity_on_hand": 1,
         "reserved_quantity": 0, "min_stock_level": 5,
+        "available_quantity": 1, "is_low_stock": True,
         "cost_price": Decimal128("100.00"), "is_active": False,
         "created_at": now,
     })

@@ -10,6 +10,7 @@ from pymongo.database import Database
 from pymongo.errors import DuplicateKeyError
 
 from common.object_id import parse_object_id
+from common.mongo import count_query_matches
 from common.time import utc_now
 
 SUPPLIER_SORT_FIELDS = frozenset(
@@ -231,7 +232,10 @@ def count_suppliers(
     status: str | None,
 ) -> int:
     """Count suppliers matching the same validated list filters."""
-    return database["suppliers"].count_documents(_supplier_list_query(search, status))
+    return count_query_matches(
+        database["suppliers"],
+        _supplier_list_query(search, status),
+    )
 
 
 def update_supplier(
@@ -319,7 +323,7 @@ def count_supplier_purchase_orders(
     query: dict[str, Any] = {"supplier_id": parse_object_id(supplier_id)}
     if outstanding_only:
         query["status"] = {"$in": sorted(OUTSTANDING_PURCHASE_ORDER_STATUSES)}
-    return database["purchase_orders"].count_documents(query)
+    return count_query_matches(database["purchase_orders"], query)
 
 
 def _purchase_order_projection(document: Mapping[str, Any]) -> dict[str, Any]:

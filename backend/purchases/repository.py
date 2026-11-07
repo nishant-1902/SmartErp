@@ -11,6 +11,7 @@ from pymongo.errors import DuplicateKeyError
 
 from common.money import to_decimal128
 from common.object_id import parse_object_id
+from common.mongo import count_query_matches
 from common.time import utc_now
 
 PURCHASE_ORDER_RESPONSE_FIELDS = (
@@ -183,7 +184,7 @@ def count_purchase_orders(
         if end_date is not None:
             created_at["$lte"] = end_date
         query["created_at"] = created_at
-    return database["purchase_orders"].count_documents(query)
+    return count_query_matches(database["purchase_orders"], query)
 
 
 def allocate_receipt_reference(

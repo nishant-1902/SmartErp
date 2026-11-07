@@ -9,6 +9,7 @@ from bson import ObjectId
 from pymongo.database import Database
 
 from common.object_id import parse_object_id
+from common.mongo import count_query_matches
 from common.time import utc_now
 
 USER_ROLES = {
@@ -311,7 +312,7 @@ def count_users(
         query["role"] = role
     if is_active is not None:
         query["is_active"] = is_active
-    return database["users"].count_documents(query)
+    return count_query_matches(database["users"], query)
 
 
 def list_audit_logs(
@@ -377,7 +378,7 @@ def count_audit_logs(
         created_at["$lte"] = end_date
     if created_at:
         query["created_at"] = created_at
-    return database["audit_logs"].count_documents(query)
+    return count_query_matches(database["audit_logs"], query)
 
 
 def create_refresh_token(

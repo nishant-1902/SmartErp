@@ -9,6 +9,7 @@ from bson import ObjectId
 from pymongo.database import Database
 
 from common.object_id import parse_object_id
+from common.mongo import count_query_matches
 from common.time import utc_now
 
 EMPLOYEE_SORT_FIELDS = frozenset(
@@ -225,7 +226,8 @@ def count_employees(
     status: str | None,
 ) -> int:
     """Count employees matching the same validated list filters."""
-    return database["employees"].count_documents(
+    return count_query_matches(
+        database["employees"],
         _employee_list_query(
             search=search,
             department_id=department_id,

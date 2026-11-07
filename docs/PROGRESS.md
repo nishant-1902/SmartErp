@@ -2232,3 +2232,67 @@
 ### Next step
 
 - Wait for approval before addressing another finding. Suggested commit: `fix: ignore untrusted forwarded IP for login lockout`.
+
+## 2026-11-07 — Performance review: lists, reports, and frontend bundle
+
+### Files created
+
+- `backend/common/management/commands/backfill_stock_index_fields.py` — idempotently backfills derived inventory fields; production requires explicit confirmation.
+- `backend/common/mongo.py` — shared exact-count helper that uses the `_id_` index for unfiltered counts.
+- `backend/scripts/seed_demo.py` — Faker-only seed and `explain("executionStats")` benchmark, restricted to local development MongoDB and an isolated `smarterp_perf_*` database.
+- `backend/tests/common/test_mongo.py` — tests the exact-count helper.
+- `backend/tests/database/test_backfill_stock_index_fields.py` — tests the derived-field backfill.
+- `frontend/src/components/DashboardCharts.jsx` — chart components extracted as a lazy-loaded bundle.
+
+### Files modified
+
+- `backend/accounts/repository.py`, `customers/repository.py`, `departments/repository.py`, `employees/repository.py`, `inventory/repository.py`, `purchases/repository.py`, `reports/repository.py`, `sales/repository.py`, and `suppliers/repository.py` — use appropriate page/history indexes and reduce avoidable work for measured list/report queries.
+- `backend/database/indexes.py` — adds measured compound and covering indexes and validates the derived product stock fields.
+- `backend/requirements-dev.txt` — adds Faker as a development-only dependency.
+- `backend/tests/inventory/test_product_api.py`, `backend/tests/inventory/test_stock_api.py`, and `backend/tests/reports/test_reports_api.py` — cover query-helper, derived stock field, and report behavior.
+- `frontend/src/pages/Home.jsx` and `frontend/src/pages/Home.test.jsx` — defer chart loading until an authorized dashboard response or error is available and test the lazy-loaded view.
+- `docs/maintenance.md` — replaces the TODO with index management, benchmark methodology, before/after results, frontend bundle sizes, and limitations.
+- `docs/PROGRESS.md` — records this performance review and its validation.
+
+### Dependencies installed
+
+- Added `Faker==40.44.0` to `backend/requirements-dev.txt` only; no runtime dependency was added.
+- No dependencies were installed during final verification.
+
+### Commands run and observed
+
+- `.\backend\venv\Scripts\python.exe .\backend\manage.py init_db` — initialized the isolated demo database.
+- `.\backend\venv\Scripts\python.exe .\backend\scripts\seed_demo.py --database smarterp_perf_demo --records 10000` — seeded fake products, sales orders, purchase orders, and supporting records in the local replica set.
+- `.\backend\venv\Scripts\python.exe .\backend\scripts\seed_demo.py --database smarterp_perf_demo --explain-only` — measured list, history, dashboard, and report queries using `explain("executionStats")`.
+- `.\scripts\run-tests.ps1` — exit code 0. Django check reported `System check identified no issues (0 silenced)`; backend tests passed twice (`384 passed in 8.18s`, then `384 passed in 11.79s` with coverage); backend coverage was `92%` (8,715 statements, 661 missed); frontend tests were `41` files and `116` tests passed; Oxlint completed with no diagnostics; Vite transformed 981 modules and built in 876 ms.
+- Final frontend build reported Home `6.35 KB` (`2.14 KB` gzip), DashboardCharts `408.28 KB` (`115.12 KB` gzip), and the shared entry chunk `323.04 KB` (`104.80 KB` gzip).
+- `git diff --check` — passed with no whitespace errors.
+
+### Features completed
+
+- Seeded and measured the requested 10,000+ fake product/order workload without touching the application database.
+- Added indexes and query changes for default list/history pages, low-stock filtering, reports, and dashboard summaries. The measured final pages/reports had no `COLLSCAN` or blocking `SORT`; representative page plans examined 20 documents, and covering summaries fetched zero source documents.
+- Materialized and backfilled `available_quantity` and `is_low_stock` for indexed low-stock filtering. Deployment order is `init_db`, backfill, then application code that filters on the derived field.
+- Moved report joins after pagination where the join does not affect ordering; the measured report joins use aggregation `$lookup`, not per-row application database calls.
+- Lazy-loaded dashboard charts. The Home page chunk is 2.14 KB gzip; chart code remains a separate 115.12 KB gzip download when rendered.
+
+### Tests passed
+
+- Full backend suite: 384 passed; coverage run: 384 passed, 92% coverage.
+- Django system check: passed.
+- Full frontend suite: 41 test files and 116 tests passed.
+- Frontend lint: passed.
+- Frontend production build: passed.
+- `git diff --check`: passed.
+
+### Known problems
+
+- The benchmark is synthetic and covers representative default query shapes, not every optional filter/sort combination or production traffic distribution.
+- Twenty existing non-unique indexes were not selected by this synthetic workload; this does not prove they are unused in production, so no indexes were removed.
+- Arbitrary substring filters, distinct category/designation output, exact counts, full-summary aggregation, and large user-selected monthly-report date ranges can still scale with data volume. These are documented; no search behavior or date-range policy was changed.
+- React renders were not profiled in a browser. The chart chunk still weighs 115.12 KB gzip when loaded.
+- The fake data remains in the isolated local `smarterp_perf_demo` database.
+
+### Next step
+
+- Review the documented scale limits and decide whether to add a supported cap/pagination policy for distinct filter values and monthly report ranges. Suggested commit: `perf: optimize indexed lists and reports`.

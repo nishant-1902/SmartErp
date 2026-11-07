@@ -8,6 +8,7 @@ from bson import ObjectId
 from pymongo.database import Database
 
 from common.object_id import parse_object_id
+from common.mongo import count_query_matches
 from common.time import utc_now
 
 _DEPARTMENT_UPDATE_FIELDS = {
@@ -179,8 +180,9 @@ def count_departments(
     is_active: bool | None,
 ) -> int:
     """Count departments matching the same validated list filters."""
-    return database["departments"].count_documents(
-        _department_list_query(search, is_active)
+    return count_query_matches(
+        database["departments"],
+        _department_list_query(search, is_active),
     )
 
 
@@ -315,8 +317,9 @@ def count_department_employees(
     search: str | None,
 ) -> int:
     """Count all employees matching the department employee-list filters."""
-    return database["employees"].count_documents(
-        _department_query(parse_object_id(department_id), search)
+    return count_query_matches(
+        database["employees"],
+        _department_query(parse_object_id(department_id), search),
     )
 
 

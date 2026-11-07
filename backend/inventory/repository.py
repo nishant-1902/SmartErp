@@ -11,6 +11,7 @@ from pymongo.client_session import ClientSession
 from pymongo.database import Database
 
 from common.exceptions import InsufficientStock
+from common.mongo import count_query_matches
 from common.money import to_decimal128
 from common.object_id import parse_object_id
 from common.time import utc_now
@@ -103,6 +104,8 @@ def create_product(
         "quantity_on_hand": 0,
         "reserved_quantity": 0,
         "min_stock_level": min_stock_level,
+        "available_quantity": 0,
+        "is_low_stock": min_stock_level >= 0,
         "is_active": is_active,
         "created_at": now,
         "updated_at": now,
@@ -157,13 +160,7 @@ def _product_list_query(
     if is_active is not None:
         query["is_active"] = is_active
     if low_stock is not None:
-        operator = "$lte" if low_stock else "$gt"
-        query["$expr"] = {
-            operator: [
-                {"$subtract": ["$quantity_on_hand", "$reserved_quantity"]},
-                "$min_stock_level",
-            ]
-        }
+        query["is_low_stock"] = low_stock
     return query
 
 
@@ -213,7 +210,8 @@ def count_products(
     low_stock: bool | None,
 ) -> int:
     """Count products matching the same validated filters as the list query."""
-    return database["products"].count_documents(
+    return count_query_matches(
+        database["products"],
         _product_list_query(
             search=search,
             category=category,
@@ -261,11 +259,36 @@ def update_product(
             changes[field] = to_decimal128(changes[field])
     changes["updated_at"] = utc_now()
 
-    database["products"].update_one(
-        {"_id": parse_object_id(product_id)},
-        {"$set": changes},
-    )
-    return find_product_by_id(database, product_id)
+    parsed_id = parse_object_id(product_id)
+    while True:
+        current = find_product_by_id(database, parsed_id)
+        if current is None:
+            return None
+        available_quantity = (
+            current["quantity_on_hand"] - current["reserved_quantity"]
+        )
+        min_stock_level = changes.get(
+            "min_stock_level",
+            current["min_stock_level"],
+        )
+        updated = database["products"].find_one_and_update(
+            {
+                "_id": parsed_id,
+                "quantity_on_hand": current["quantity_on_hand"],
+                "reserved_quantity": current["reserved_quantity"],
+                "min_stock_level": current["min_stock_level"],
+            },
+            {
+                "$set": {
+                    **changes,
+                    "available_quantity": available_quantity,
+                    "is_low_stock": available_quantity <= min_stock_level,
+                }
+            },
+            return_document=ReturnDocument.AFTER,
+        )
+        if updated is not None:
+            return updated
 
 
 def public_product_fields(document: Mapping[str, Any]) -> dict[str, Any]:
@@ -330,6 +353,21 @@ def apply_stock_update(
     )
     if updated is None:
         raise InsufficientStock()
+    available_quantity = (
+        updated["quantity_on_hand"] - updated["reserved_quantity"]
+    )
+    updated["available_quantity"] = available_quantity
+    updated["is_low_stock"] = available_quantity <= updated["min_stock_level"]
+    database["products"].update_one(
+        {"_id": product_id},
+        {
+            "$set": {
+                "available_quantity": available_quantity,
+                "is_low_stock": updated["is_low_stock"],
+            }
+        },
+        session=session,
+    )
     return updated
 
 
@@ -409,7 +447,8 @@ def count_stock_movements(
     user_id: ObjectId | None,
 ) -> int:
     """Count movements matching the same validated filters as the list query."""
-    return database["stock_movements"].count_documents(
+    return count_query_matches(
+        database["stock_movements"],
         _stock_movement_query(
             product_id=product_id,
             movement_type=movement_type,

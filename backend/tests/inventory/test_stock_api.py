@@ -121,7 +121,7 @@ def auth_headers(user):
     return {"HTTP_AUTHORIZATION": f"Bearer {token}"}
 
 
-def insert_product(database, *, quantity=10, reserved=0):
+def insert_product(database, *, quantity=10, reserved=0, min_stock_level=0):
     now = utc_now()
     product = {
         "_id": ObjectId(),
@@ -135,7 +135,9 @@ def insert_product(database, *, quantity=10, reserved=0):
         "selling_price": Decimal128(Decimal("2.00")),
         "quantity_on_hand": quantity,
         "reserved_quantity": reserved,
-        "min_stock_level": 0,
+        "min_stock_level": min_stock_level,
+        "available_quantity": quantity - reserved,
+        "is_low_stock": quantity - reserved <= min_stock_level,
         "is_active": True,
         "created_at": now,
         "updated_at": now,
@@ -195,6 +197,29 @@ def test_adjustment_up_and_down_record_movements(client, stock_api):
         assert movement["reserved_change"] == 0
         assert movement["reference_type"] == "stock_adjustment"
         assert movement["performed_by"] == user["_id"]
+
+
+def test_stock_changes_recalculate_indexed_low_stock_fields(client, stock_api):
+    user = insert_user(stock_api)
+    product = insert_product(
+        stock_api,
+        quantity=10,
+        reserved=2,
+        min_stock_level=5,
+    )
+
+    response = post_adjustment(
+        client,
+        user,
+        product["_id"],
+        -5,
+        str(uuid4()),
+    )
+
+    assert response.status_code == 201
+    stored = stock_api["products"].find_one({"_id": product["_id"]})
+    assert stored["available_quantity"] == 3
+    assert stored["is_low_stock"] is True
 
 
 def test_reduction_cannot_consume_reserved_stock(client, stock_api):

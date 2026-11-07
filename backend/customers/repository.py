@@ -8,6 +8,7 @@ from bson import ObjectId
 from pymongo.database import Database
 
 from common.money import to_decimal128
+from common.mongo import count_query_matches
 from common.object_id import parse_object_id
 from common.time import utc_now
 
@@ -173,7 +174,10 @@ def count_customers(
     status: str | None,
 ) -> int:
     """Count customers matching the same validated list filters."""
-    return database["customers"].count_documents(_customer_list_query(search, status))
+    return count_query_matches(
+        database["customers"],
+        _customer_list_query(search, status),
+    )
 
 
 def update_customer(
@@ -249,7 +253,7 @@ def count_customer_sales_orders(
     query: dict[str, Any] = {"customer_id": parse_object_id(customer_id)}
     if status is not None:
         query["status"] = status
-    return database["sales_orders"].count_documents(query)
+    return count_query_matches(database["sales_orders"], query)
 
 
 def _customer_projection(document: Mapping[str, Any]) -> dict[str, Any]:
