@@ -87,6 +87,82 @@ def test_login_lockout_starts_after_fifth_failure_and_expires():
     ) is None
 
 
+@pytest.mark.parametrize("use_naive_datetimes", [False, True])
+def test_login_lockout_compares_naive_and_aware_datetimes_as_utc(
+    use_naive_datetimes,
+):
+    database = FakeDatabase()
+    now = utc_now()
+    locked_until = now + timedelta(minutes=5)
+    expires_at = now + timedelta(minutes=20)
+    if use_naive_datetimes:
+        locked_until = locked_until.replace(tzinfo=None)
+        expires_at = expires_at.replace(tzinfo=None)
+    database["login_attempts"].insert_one(
+        {
+            "email": "locked@example.test",
+            "client_ip": "127.0.0.1",
+            "failed_count": 5,
+            "expires_at": expires_at,
+            "locked_until": locked_until,
+        }
+    )
+
+    locked, retry_after = check_login_lockout(
+        database,
+        "locked@example.test",
+        "127.0.0.1",
+    )
+
+    assert locked is True
+    assert 1 <= retry_after <= 300
+
+
+@pytest.mark.parametrize("use_naive_datetime", [False, True])
+def test_expired_login_attempt_is_removed_for_naive_or_aware_expiry(
+    use_naive_datetime,
+):
+    database = FakeDatabase()
+    expired_at = utc_now() - timedelta(seconds=1)
+    if use_naive_datetime:
+        expired_at = expired_at.replace(tzinfo=None)
+    database["login_attempts"].insert_one(
+        {
+            "email": "expired@example.test",
+            "client_ip": "127.0.0.1",
+            "failed_count": 5,
+            "expires_at": expired_at,
+            "locked_until": expired_at,
+        }
+    )
+
+    assert check_login_lockout(
+        database,
+        "expired@example.test",
+        "127.0.0.1",
+    ) == (False, 0)
+    assert database["login_attempts"].find_one(
+        {"email": "expired@example.test"}
+    ) is None
+
+
+def test_login_attempt_with_missing_expiry_and_lock_fields_is_safe():
+    database = FakeDatabase()
+    database["login_attempts"].insert_one(
+        {
+            "email": "legacy@example.test",
+            "client_ip": "127.0.0.1",
+            "failed_count": 1,
+        }
+    )
+
+    assert check_login_lockout(
+        database,
+        "legacy@example.test",
+        "127.0.0.1",
+    ) == (False, 0)
+
+
 def test_successful_login_clears_attempts_and_writes_audit():
     database = FakeDatabase()
     user = insert_user(database)

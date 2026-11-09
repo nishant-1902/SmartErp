@@ -543,11 +543,11 @@ def get_login_retry_after(database: Database[Any], email: str, client_ip: str) -
     record = get_login_attempt(database, email, client_ip)
     if record is None:
         return 0
-    now = utc_now()
+    now = _as_utc(utc_now())
     locked_until = record.get("locked_until")
-    if locked_until is None:
+    if not isinstance(locked_until, datetime):
         return 0
-    remaining = (locked_until - now).total_seconds()
+    remaining = (_as_utc(locked_until) - now).total_seconds()
     return max(1, int(remaining))
 
 
@@ -556,15 +556,19 @@ def check_login_lockout(database: Database[Any], email: str, client_ip: str) -> 
     record = get_login_attempt(database, email, client_ip)
     if record is None:
         return False, 0
-    now = utc_now()
-    locked_until = record.get("locked_until")
-    if isinstance(locked_until, datetime) and locked_until > now:
-        return True, get_login_retry_after(database, email, client_ip)
-    if record.get("expires_at") and record.get("expires_at") <= now:
+    now = _as_utc(utc_now())
+
+    expires_at = record.get("expires_at")
+    if isinstance(expires_at, datetime) and _as_utc(expires_at) <= now:
         database["login_attempts"].delete_one({
             "email": record.get("email"),
             "client_ip": client_ip,
         })
+        return False, 0
+
+    locked_until = record.get("locked_until")
+    if isinstance(locked_until, datetime) and _as_utc(locked_until) > now:
+        return True, get_login_retry_after(database, email, client_ip)
     return False, 0
 
 

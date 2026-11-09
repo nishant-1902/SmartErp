@@ -2401,3 +2401,53 @@
 ### Next step
 
 - Portfolio material is complete. Stop here as requested. Suggested commit: `docs: add SmartERP portfolio material`.
+
+## 2026-11-09 — Fix authentication login serialization and lockout dates
+
+### Files created
+
+- None.
+
+### Files modified
+
+- `backend/accounts/services.py` — normalize lockout expiry and lock deadlines with the existing `_as_utc` helper; guard absent or non-datetime values and remove expired attempt records before evaluating a lock.
+- `backend/accounts/views.py` — recursively serialize the public authentication user with the existing BSON-safe `serialize_document` helper before adding permissions.
+- `backend/tests/accounts/test_auth_service_rules.py` — regression coverage for naive/aware active and expired dates plus legacy records missing date fields.
+- `backend/tests/accounts/test_user_management.py` — regression coverage for ObjectId `employee_id`, JSON-safe timestamps, logout revocation, and refresh rejection after logout.
+- `docs/PROGRESS.md` — recorded this fix and its validation.
+
+### Dependencies installed
+
+- None.
+
+### Commands run and observed
+
+- From `backend\`, `python -m pytest tests\accounts\ -v` (using the project venv interpreter) — `74 passed in 5.53s`.
+- From `backend\`, `python manage.py check` (using the project venv interpreter) — `System check identified no issues (0 silenced).`
+- From `backend\`, `python -m pytest -v` (using the project venv interpreter) — `391 passed in 7.48s`.
+- From `frontend\`, `npm test -- src/services/apiClient.test.js` first failed inside the sandbox with Vite `spawn EPERM`; approved rerun outside the sandbox — `1` test file and `7` tests passed. This verifies the existing client does not refresh recursively after a 401 from `/auth/refresh/`.
+- `git diff --check` — no whitespace errors; Git emitted warnings while scanning inaccessible pytest temporary directories.
+
+### Features completed
+
+- Login lockout date comparisons now treat naive MongoDB datetimes as UTC and compare normalized aware UTC values. Missing `expires_at` and `locked_until` fields are safe; expired records are deleted.
+- Authentication user payloads pass through the shared recursive BSON serializer, converting ObjectIds to strings and datetime values to ISO strings while preserving the JSON response envelope.
+- Existing five-failure/15-minute lockout, incorrect-password response, JWT/refresh issuance, logout revocation, and user administration paths remained covered by tests.
+
+### Tests passed
+
+- Accounts tests: 74 passed.
+- Full backend tests: 391 passed.
+- Django system check: passed.
+- Existing frontend auth-interceptor tests: 7 passed.
+- `git diff --check`: passed without whitespace errors.
+
+### Known problems
+
+- The API/client regression tests use the repository's fake MongoDB fixture. Live MongoDB replica-set behavior was not part of this fix's requested verification.
+- The unprivileged frontend test startup failed with `spawn EPERM`; the approved outside-sandbox rerun passed.
+- No dependencies were installed; no frontend or unrelated modules were changed.
+
+### Next step
+
+- Authentication error fix is complete. Stop here and wait for user confirmation. Suggested commit: `fix: normalize login lockout dates and serialize auth users`.

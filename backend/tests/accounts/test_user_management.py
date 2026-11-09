@@ -144,6 +144,68 @@ def test_login_verifies_password_and_issues_access_and_hashed_refresh_tokens(
     assert refresh_cookie.value not in refresh_record.values()
 
 
+def test_login_response_serializes_employee_object_id_and_timestamps(
+    client,
+    management_api,
+):
+    employee_id = ObjectId()
+    user = insert_user(
+        management_api,
+        "employee",
+        employee_id=employee_id,
+    )
+
+    response = client.post(
+        "/api/auth/login/",
+        {"email": user["email"], "password": "ExistingSafePass887!"},
+        format="json",
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["success"] is True
+    response_user = payload["data"]["user"]
+    assert response_user["employee_id"] == str(employee_id)
+    assert response_user["id"] == str(user["_id"])
+    assert isinstance(response_user["created_at"], str)
+    assert isinstance(response_user["last_login_at"], str)
+
+
+def test_logout_revokes_refresh_and_following_refresh_returns_401(
+    client,
+    management_api,
+):
+    user = insert_user(management_api, "employee")
+    login = client.post(
+        "/api/auth/login/",
+        {"email": user["email"], "password": "ExistingSafePass887!"},
+        format="json",
+    )
+    access_token = login.json()["data"]["access_token"]
+    refresh_cookie_name = settings.REFRESH_COOKIE_NAME
+    assert client.cookies.get(refresh_cookie_name) is not None
+
+    logout = client.post(
+        "/api/auth/logout/",
+        {},
+        format="json",
+        HTTP_AUTHORIZATION=f"Bearer {access_token}",
+        HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+    )
+    refresh = client.post(
+        "/api/auth/refresh/",
+        {},
+        format="json",
+        HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+    )
+
+    assert logout.status_code == 200
+    assert logout.json()["success"] is True
+    assert refresh.status_code == 401
+    assert refresh.json()["success"] is False
+    assert refresh.json()["error"]["code"] == "invalid_refresh_token"
+
+
 def test_admin_can_create_search_and_read_user_without_hashes(
     client,
     management_api,

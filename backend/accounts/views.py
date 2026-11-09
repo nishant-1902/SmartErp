@@ -54,6 +54,7 @@ from accounts.tokens import create_access_token
 from common.responses import error_response, success_response
 from common.object_id import parse_object_id
 from common.pagination import parse_pagination
+from common.serialization import serialize_document
 from common.time import utc_now
 
 
@@ -82,7 +83,7 @@ def get_user_agent(request: Any) -> str | None:
 
 def _auth_user_payload(user: dict[str, Any]) -> dict[str, Any]:
     """Include the role's current capability list in authentication responses."""
-    public_user = get_public_user(user)
+    public_user = serialize_document(get_public_user(user))
     public_user["permissions"] = sorted(
         ROLE_PERMISSIONS.get(public_user.get("role"), frozenset())
     )
