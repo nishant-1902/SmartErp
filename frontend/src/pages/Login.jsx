@@ -32,6 +32,7 @@ export default function Login() {
   const location = useLocation()
   const navigate = useNavigate()
   const [authError, setAuthError] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const {
     register,
     handleSubmit,
@@ -84,14 +85,19 @@ export default function Login() {
             registerProps={register('email')}
             type="email"
           />
-          <FormInput
-            autoComplete="current-password"
-            error={errors.password}
-            label="Password"
-            name="password"
-            registerProps={register('password')}
-            type="password"
-          />
+          <div className="auth-password-field">
+            <FormInput
+              autoComplete="current-password"
+              error={errors.password}
+              label="Password"
+              name="password"
+              registerProps={register('password')}
+              type={showPassword ? 'text' : 'password'}
+            />
+            <button aria-label={showPassword ? 'Hide password' : 'Show password'} className="auth-password-toggle" onClick={() => setShowPassword((value) => !value)} type="button">
+              {showPassword ? 'Hide' : 'Show'}
+            </button>
+          </div>
           <button
             className="btn btn-primary w-100 mt-2 py-2"
             disabled={isSubmitting || loading}

@@ -1,5 +1,5 @@
-import { Link } from 'react-router-dom'
-import { useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { useEffect, useState } from 'react'
 import Button from 'react-bootstrap/Button'
 import Form from 'react-bootstrap/Form'
 import DataTable from '../components/DataTable.jsx'
@@ -25,7 +25,14 @@ export default function Inventory() {
   const canAdjust = hasPermission('stock:adjust')
   const { showToast } = useToast()
   const list = usePaginatedList(listProducts)
+  const { setFilter } = list
+  const [searchParams] = useSearchParams()
   const [adjustingProduct, setAdjustingProduct] = useState(null)
+
+  useEffect(() => {
+    const lowStock = searchParams.get('low_stock')
+    if (lowStock === 'true') setFilter('low_stock', 'true')
+  }, [searchParams, setFilter])
 
   async function submitAdjustment(values, key) {
     await adjustStock(values, key)

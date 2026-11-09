@@ -116,6 +116,33 @@ describe('UI foundation components', () => {
     expect(screen.queryByText('Employees')).not.toBeInTheDocument()
   })
 
+  it('keeps accessible icon links in the collapsed sidebar', () => {
+    const { container } = render(
+      <BrowserRouter>
+        <Sidebar collapsed />
+      </BrowserRouter>,
+    )
+
+    expect(container.querySelector('.sidebar-collapsed')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Departments' })).toBeInTheDocument()
+  })
+
+  it('allows navigation groups to be expanded and collapsed', () => {
+    render(
+      <BrowserRouter>
+        <Sidebar />
+      </BrowserRouter>,
+    )
+
+    const organization = screen.getByRole('button', { name: /Organization/ })
+    expect(organization).toHaveAttribute('aria-expanded', 'true')
+    fireEvent.click(organization)
+    expect(organization).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByText('Departments')).not.toBeInTheDocument()
+    fireEvent.click(organization)
+    expect(screen.getByText('Departments')).toBeInTheDocument()
+  })
+
   it('shows account navigation only when the matching permissions are present', () => {
     sidebarAuth.role = 'super_admin'
     sidebarAuth.user.permissions = [

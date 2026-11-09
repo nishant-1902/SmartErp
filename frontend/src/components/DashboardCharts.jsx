@@ -1,4 +1,6 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
+import Button from 'react-bootstrap/Button'
+import { Link } from 'react-router-dom'
 import {
   Bar,
   BarChart,
@@ -17,7 +19,7 @@ import {
 import DashboardWidget from './DashboardWidget.jsx'
 import { formatMoney } from '../utils/formatMoney.js'
 
-const chartColors = ['#3157d5', '#16a085', '#e67e22', '#8e44ad', '#d64550']
+const chartColors = ['#4776e6', '#20a58a', '#9271db', '#e6a34b', '#d96c78', '#48a6bd']
 
 function chartMoneyTick(value) {
   return Number(value).toLocaleString(undefined, {
@@ -29,6 +31,16 @@ function tooltipMoney(value, name, payload, dataKey) {
   const sourceKey = dataKey?.replace(/_chart$/, '')
   const exactValue = payload?.[sourceKey] ?? String(value ?? 0)
   return [formatMoney(exactValue), name]
+}
+
+function InventoryStat({ label, value, detail }) {
+  return (
+    <div className="inventory-stat">
+      <span className="inventory-stat__label">{label}</span>
+      <strong className="inventory-stat__value">{value ?? '—'}</strong>
+      {detail && <span className="inventory-stat__detail">{detail}</span>}
+    </div>
+  )
 }
 
 /**
@@ -45,6 +57,8 @@ export default function DashboardCharts({
   onRetry,
   widgetError,
 }) {
+  const [selectedCategory, setSelectedCategory] = useState(null)
+  const [hiddenCategories, setHiddenCategories] = useState([])
   const salesChartData = useMemo(
     () =>
       (dashboard.sales_chart ?? []).map((month) => ({
@@ -64,6 +78,32 @@ export default function DashboardCharts({
       })),
     [dashboard.purchases_vs_sales],
   )
+
+  const inventoryData = useMemo(
+    () => (dashboard.inventory_by_category ?? []).map((item, index) => ({
+      ...item,
+      available_quantity: Number(item.available_quantity) || 0,
+      color: chartColors[index % chartColors.length],
+    })),
+    [dashboard.inventory_by_category],
+  )
+  const visibleInventoryData = inventoryData.filter(
+    (item) => !hiddenCategories.includes(item.category),
+  )
+  const hasVisibleQuantity = visibleInventoryData.some((item) => item.available_quantity > 0)
+  const inventoryBarHeight = Math.max(160, visibleInventoryData.length * 36 + 24)
+  const inventoryStats = dashboard.inventory_statistics ?? {}
+
+  function toggleCategory(category) {
+    setHiddenCategories((current) => current.includes(category)
+      ? current.filter((value) => value !== category)
+      : [...current, category])
+  }
+
+  function selectCategory(payload) {
+    const category = payload?.category ?? payload?.payload?.category
+    if (category) setSelectedCategory(category)
+  }
 
   return (
     <>
@@ -163,7 +203,7 @@ export default function DashboardCharts({
 
       {canReadInventory && (
         <div className="row g-3 mb-3">
-          <div className="col-12 col-xl-6">
+          <div className="col-12">
             <DashboardWidget
               available={dashboard.inventory_by_category !== undefined}
               error={widgetError('inventory_by_category')}
@@ -171,33 +211,112 @@ export default function DashboardCharts({
               onRetry={onRetry}
               title="Inventory by category"
             >
-              <div className="surface-card dashboard-chart p-3">
-                <h2 className="h6 mb-3">Available inventory by category</h2>
-                {dashboard.inventory_by_category?.length === 0 ? (
-                  <p className="text-muted mb-0">No active inventory was returned.</p>
+              <div className="surface-card dashboard-chart inventory-dashboard p-3 p-md-4">
+                <div className="d-flex flex-wrap align-items-start justify-content-between gap-2 mb-3">
+                  <div>
+                    <h2 className="h6 mb-1">Available inventory by category</h2>
+                    <p className="small text-muted mb-0">Available units across active products</p>
+                  </div>
+                  {selectedCategory && (
+                    <Button onClick={() => setSelectedCategory(null)} size="sm" variant="outline-secondary">
+                      Reset selection
+                    </Button>
+                  )}
+                </div>
+                {inventoryData.length === 0 ? (
+                  <div className="inventory-empty-state" role="status">
+                    <span aria-hidden="true" className="inventory-empty-state__mark">◌</span>
+                    <strong>No inventory categories yet</strong>
+                    <span className="text-muted">Category distribution will appear when active products have stock data.</span>
+                  </div>
                 ) : (
-                  <ResponsiveContainer height={280} width="100%">
-                    <PieChart>
-                      <Pie
-                        data={dashboard.inventory_by_category ?? []}
-                        dataKey="available_quantity"
-                        nameKey="category"
-                        outerRadius={95}
-                        label={({ name, value }) => `${name}: ${value}`}
-                      >
-                        {(dashboard.inventory_by_category ?? []).map(
-                          (entry, index) => (
-                            <Cell
-                              fill={chartColors[index % chartColors.length]}
-                              key={entry.category}
-                            />
-                          ),
-                        )}
-                      </Pie>
-                      <Tooltip />
-                      <Legend />
-                    </PieChart>
-                  </ResponsiveContainer>
+                  <>
+                    <div className="row g-4 align-items-center">
+                      <div className="col-12 col-lg-5 col-xl-4">
+                        <div aria-label="Available stock distribution by category" className="inventory-donut-frame" role="img">
+                          {hasVisibleQuantity ? (
+                            <ResponsiveContainer height="100%" width="100%">
+                              <PieChart>
+                                <Pie
+                                  data={visibleInventoryData}
+                                  dataKey="available_quantity"
+                                  innerRadius="58%"
+                                  nameKey="category"
+                                  outerRadius="82%"
+                                  paddingAngle={2}
+                                  onClick={selectCategory}
+                                >
+                                  {visibleInventoryData.map((entry) => (
+                                    <Cell
+                                      fill={entry.color}
+                                      key={entry.category}
+                                      opacity={selectedCategory && selectedCategory !== entry.category ? 0.35 : 1}
+                                      stroke="var(--erp-surface)"
+                                      strokeWidth={2}
+                                    />
+                                  ))}
+                                </Pie>
+                                <Tooltip formatter={(value, name) => [`${value} units`, name]} />
+                              </PieChart>
+                            </ResponsiveContainer>
+                          ) : (
+                            <div className="inventory-chart-empty" role="status">{visibleInventoryData.length ? 'No available units in the visible categories.' : 'All categories are hidden.'}</div>
+                          )}
+                        </div>
+                        <div aria-label="Inventory categories" className="inventory-legend">
+                          {inventoryData.map((entry) => {
+                            const visible = !hiddenCategories.includes(entry.category)
+                            return (
+                              <button
+                                aria-pressed={visible}
+                                className={`inventory-legend__item${visible ? '' : ' is-hidden'}`}
+                                key={entry.category}
+                                onClick={() => toggleCategory(entry.category)}
+                                type="button"
+                              >
+                                <span aria-hidden="true" className="inventory-legend__swatch" style={{ '--legend-color': entry.color }} />
+                                <span>{entry.category}</span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                      <div className="col-12 col-lg-7 col-xl-8">
+                        <div className="inventory-summary-grid">
+                          <InventoryStat label="Active products" value={inventoryStats.active_products ?? dashboard.total_products} />
+                          <InventoryStat label="Available stock" value={inventoryStats.available_quantity} />
+                          <InventoryStat label="Reserved stock" value={inventoryStats.reserved_quantity} />
+                          <InventoryStat label="Low stock" value={inventoryStats.low_stock_count ?? dashboard.low_stock_count} />
+                          <InventoryStat label="Out of stock" value={null} detail="Not reported by API" />
+                        </div>
+                        <div aria-live="polite" className="inventory-selection mt-3">
+                          {selectedCategory ? (() => {
+                            const item = inventoryData.find((value) => value.category === selectedCategory)
+                            return item ? <><strong>{item.category}</strong><span>{item.product_count} products · {item.available_quantity} available units</span><Link className="small ms-auto" to={`/products?category=${encodeURIComponent(item.category)}`}>View products</Link></> : <span>Select a visible category to inspect its stock.</span>
+                          })() : <span>Select a chart segment or category bar to inspect that category.</span>}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="inventory-category-chart mt-4">
+                      <div className="d-flex flex-wrap align-items-baseline justify-content-between gap-2 mb-2">
+                        <h3 className="small fw-semibold mb-0">Stock by category</h3>
+                        <span className="small text-muted">Available units</span>
+                      </div>
+                      <div className="inventory-bar-frame" style={{ height: inventoryBarHeight }}>
+                        <ResponsiveContainer height="100%" width="100%">
+                          <BarChart data={visibleInventoryData} layout="vertical" margin={{ top: 4, right: 16, bottom: 4, left: 8 }}>
+                            <CartesianGrid horizontal={false} stroke="var(--erp-border)" />
+                            <XAxis allowDecimals={false} axisLine={false} tickLine={false} type="number" />
+                            <YAxis axisLine={false} dataKey="category" tickLine={false} type="category" width={110} />
+                            <Tooltip formatter={(value) => [`${value} units`, 'Available']} />
+                            <Bar dataKey="available_quantity" radius={[0, 5, 5, 0]} onClick={selectCategory}>
+                              {visibleInventoryData.map((entry) => <Cell fill={entry.color} key={entry.category} cursor="pointer" opacity={selectedCategory && selectedCategory !== entry.category ? 0.35 : 1} />)}
+                            </Bar>
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  </>
                 )}
               </div>
             </DashboardWidget>

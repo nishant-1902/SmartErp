@@ -11,11 +11,12 @@ import Sidebar from '../components/Sidebar.jsx'
  */
 export default function MainLayout() {
   const [showMenu, setShowMenu] = useState(false)
+  const [collapsed, setCollapsed] = useState(false)
 
   return (
     <div className="app-shell d-flex">
       <Offcanvas
-        className="app-sidebar"
+        className={`app-sidebar${collapsed ? ' desktop-collapsed' : ''}`}
         onHide={() => setShowMenu(false)}
         responsive="lg"
         show={showMenu}
@@ -24,11 +25,11 @@ export default function MainLayout() {
           <Offcanvas.Title>Navigation</Offcanvas.Title>
         </Offcanvas.Header>
         <Offcanvas.Body className="p-0">
-          <Sidebar onNavigate={() => setShowMenu(false)} />
+          <Sidebar collapsed={collapsed} onNavigate={() => setShowMenu(false)} />
         </Offcanvas.Body>
       </Offcanvas>
       <div className="app-content-shell">
-        <Navbar onMenuClick={() => setShowMenu(true)} />
+        <Navbar collapsed={collapsed} onMenuClick={() => setShowMenu(true)} onSidebarToggle={() => setCollapsed((value) => !value)} />
         <main className="app-main">
           <Outlet />
         </main>

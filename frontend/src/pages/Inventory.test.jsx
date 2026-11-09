@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { BrowserRouter } from 'react-router-dom'
+import { BrowserRouter, MemoryRouter } from 'react-router-dom'
 import { ToastProvider } from '../context/ToastContext.jsx'
 import { useAuth } from '../hooks/useAuth.js'
 import { adjustStock, listProducts } from '../services/productService.js'
@@ -43,6 +43,24 @@ beforeEach(() => {
 })
 
 describe('Inventory page', () => {
+  it('applies the dashboard low-stock filter from the route query', async () => {
+    render(
+      <MemoryRouter initialEntries={['/inventory?low_stock=true']}>
+        <ToastProvider>
+          <Inventory />
+        </ToastProvider>
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      expect(listProducts).toHaveBeenCalledWith(
+        expect.objectContaining({ low_stock: 'true' }),
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      )
+    })
+    expect(screen.getByLabelText('Filter inventory by stock level')).toHaveValue('true')
+  })
+
   it('highlights low available stock and submits an idempotent adjustment', async () => {
     vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValue(
       'b71e13fc-c064-42c4-ad88-3fce79d2c618',

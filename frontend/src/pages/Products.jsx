@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import Button from 'react-bootstrap/Button'
 import Form from 'react-bootstrap/Form'
 import ConfirmDialog from '../components/ConfirmDialog.jsx'
@@ -30,12 +30,19 @@ export default function Products() {
   const canWrite = hasPermission('products:write')
   const { showToast } = useToast()
   const list = usePaginatedList(listProducts)
+  const { setFilter } = list
+  const [searchParams] = useSearchParams()
   const [categories, setCategories] = useState([])
   const [categoriesError, setCategoriesError] = useState(null)
   const [editingProduct, setEditingProduct] = useState(null)
   const [formOpen, setFormOpen] = useState(false)
   const [statusProduct, setStatusProduct] = useState(null)
   const [statusBusy, setStatusBusy] = useState(false)
+
+  useEffect(() => {
+    const category = searchParams.get('category')
+    if (category) setFilter('category', category)
+  }, [searchParams, setFilter])
 
   useEffect(() => {
     const controller = new AbortController()

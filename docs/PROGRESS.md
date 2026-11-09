@@ -2451,3 +2451,170 @@
 ### Next step
 
 - Authentication error fix is complete. Stop here and wait for user confirmation. Suggested commit: `fix: normalize login lockout dates and serialize auth users`.
+
+## 2026-11-09 — UI redesign Group 1: shared foundation and application shell
+
+### Files modified
+
+- `frontend/src/assets/styles.css` — established shared color, spacing, typography, radius, shadow, and transition tokens; refreshed shared surfaces, form controls, tables, dropdowns, responsive shell, and authentication layout.
+- `frontend/src/config/navigation.js` — grouped implemented navigation destinations by workspace area while preserving permission and role filtering.
+- `frontend/src/components/Sidebar.jsx` — added collapsible navigation groups and compact desktop sidebar behavior.
+- `frontend/src/components/Navbar.jsx` — added route context, responsive shell controls, account/profile/settings actions, and logout.
+- `frontend/src/layouts/MainLayout.jsx` — connected desktop sidebar collapse and the existing mobile offcanvas navigation.
+- `frontend/src/layouts/AuthLayout.jsx` — added branded split-screen authentication introduction.
+- `frontend/src/pages/Login.jsx` — added accessible password visibility toggle without changing authentication behavior.
+- `docs/PROGRESS.md` — recorded this controlled UI redesign step and verification.
+
+### Commands run and observed
+
+- `npm test` — `41` test files passed; `116` tests passed.
+- `npm run lint` — Oxlint completed without diagnostics.
+- `npm run build` — Vite transformed 981 modules and built successfully.
+- `git diff --check` — passed; Git reported existing access warnings while scanning pytest temporary directories and line-ending notices for modified CSS/JS files.
+
+### Features completed
+
+- Group 1 foundation and shell changes are implemented. Existing React Router routes, permission checks, APIs, and token/auth behavior remain in place.
+- Sidebar navigation only links to destinations supported by the current route map. Invoices remains absent as a sidebar destination because the existing route requires an invoice ID.
+- Authentication pages retain the current login and password-reset service flows. The custom 403 and 404 pages continue to use the authenticated shell.
+
+### Known problems
+
+- Responsive layout has CSS coverage for mobile, including the 320px baseline, but was not visually inspected in a browser during this step.
+- Dashboard and business module pages have not yet received their group-specific redesigns. Dark mode remains scheduled for Group 6.
+
+### Next step
+
+- Continue with Group 2: dashboard, employees, departments, users, and settings. Suggested commit: `feat: redesign SmartERP application shell`.
+
+## 2026-11-09 — Dashboard inventory chart overlap fix
+
+### Files modified
+
+- `frontend/src/components/DashboardCharts.jsx` — replaced crowded inventory pie labels/legend with a responsive donut, separate interactive category legend, actual-data inventory summary, and horizontal category bar chart. Added category selection/reset, empty states, and a link to the matching product filter.
+- `frontend/src/assets/styles.css` — added responsive layout styles for inventory chart, summary, category legend, and empty states.
+- `frontend/src/pages/Products.jsx` — applies an incoming `?category=` filter to the existing products query.
+- `frontend/src/pages/Home.test.jsx` — covers category legend visibility toggling.
+- `frontend/src/pages/Products.test.jsx` — covers the dashboard category link filter.
+- `docs/PROGRESS.md` — recorded the chart diagnosis and observed verification.
+
+### Root cause found
+
+- The pie chart generated an outside label for every category (`label` on `Pie`) and rendered the Recharts legend in the same 280px chart region. The chart was placed in a half-width desktop column. Category labels could therefore collide with each other and the legend as the number or length of category names grew.
+- The chart already had an explicit height and its card/column had a constrained width, so the source did not point to a missing `ResizeObserver` size or unbounded flex width. Removing the per-slice labels and separating the legend and summary addresses the actual collision.
+- The API reports active product count, available units, reserved units, low-stock count, and per-category product counts/available units. It does not report out-of-stock count; the dashboard shows that value as unavailable instead of deriving a fictional number.
+
+### Commands run and observed
+
+- `npm test` — `41` test files passed; `118` tests passed.
+- `npm run lint` — Oxlint completed without diagnostics after correcting a hook dependency warning.
+- `npm run build` — Vite transformed 981 modules and built successfully.
+- `npm test -- src/pages/Products.test.jsx src/pages/Home.test.jsx` — `2` test files and `7` tests passed after the final hook dependency cleanup.
+
+### Known problems
+
+- Chart segment/bar pointer selection is implemented with Recharts callbacks; this step did not include browser-based visual inspection or automated pointer interaction testing against the real Recharts renderer.
+- The pasted request ends mid-sentence in its analytics section (“Monthly”), so requirements after that point are unavailable. Only the complete, actionable inventory chart issue was implemented in this step.
+
+### Next step
+
+- Continue the redesigned dashboard once the remaining analytics requirements are available. Suggested commit: `fix: prevent dashboard inventory chart overlap`.
+
+## 2026-11-09 — Compact dashboard low-stock table
+
+### Files modified
+
+- `frontend/src/pages/Home.jsx` — made Low-stock products full width, limited the initial table to six API rows, aligned product/SKU/quantity/minimum/status columns, added low-stock and out-of-stock badges, and linked to filtered Inventory.
+- `frontend/src/components/DataTable.jsx` — added optional wrapper and column class names for page-specific table styling.
+- `frontend/src/pages/Inventory.jsx` — reads the existing `low_stock=true` query parameter and applies the existing list filter.
+- `frontend/src/assets/styles.css` — added scoped compact row spacing, fixed table layout, no-wrap cells, ellipsis for long names, subtle row hover, status colors, and small-screen table-only horizontal scrolling.
+- `frontend/src/pages/Home.test.jsx` — covered the six-row cap, status labels, and View All destination.
+- `frontend/src/pages/Inventory.test.jsx` — covered applying the dashboard's low-stock query filter.
+- `docs/PROGRESS.md` — recorded the change and verification.
+
+### Commands run and observed
+
+- `npm test` — `41` test files passed; `120` tests passed.
+- `npm run lint` — Oxlint completed without diagnostics.
+- `npm run build` — Vite transformed 981 modules and built successfully.
+- Focused dashboard and inventory tests — `2` test files and `8` tests passed.
+
+### Features completed
+
+- The table uses the full dashboard row, has no fixed height, and displays no more than six real low-stock products.
+- Small screens scroll within the table wrapper while the page layout remains unconstrained horizontally; the desktop/tablet table uses balanced fixed column proportions.
+- “View all” opens the existing Inventory page with its existing low-stock API filter selected. No backend, stock calculation, or stock mutation behavior changed.
+
+### Known problems
+
+- Layout behavior is defined for small screens using a table-only scroll container, but browser visual checks at 320px, 375px, 768px, and desktop were not run.
+
+### Next step
+
+- Dashboard low-stock table change is complete. Suggested commit: `feat: compact dashboard low-stock table`.
+
+## 2026-11-09 — Improve sidebar contrast and responsive sizing
+
+### Files modified
+
+- `frontend/src/assets/styles.css` — applied the requested navy sidebar palette and contrast tokens; set expanded width to 240px, kept the 76px desktop collapsed width, improved hover/active/focus states, styled the mobile close control, and restored full width when a collapsed desktop sidebar enters offcanvas mode.
+- `frontend/src/components/foundation.test.jsx` — added coverage for collapsed sidebar link labels and expandable navigation groups.
+- `docs/PROGRESS.md` — recorded this sidebar adjustment and verification.
+
+### Commands run and observed
+
+- `npm test` — `41` test files passed; `122` tests passed.
+- `npm run lint` — Oxlint completed without diagnostics.
+- `npm run build` — Vite transformed 981 modules and built successfully.
+- `git diff --check` — passed with no whitespace errors; Git reported line-ending notices and access warnings for existing temporary test folders.
+
+### Features completed
+
+- Sidebar uses the requested background, logo, label, icon, section heading, active, hover, and border colors.
+- Active links retain route highlighting and permission-aware visibility. Navigation groups remain collapsible, and mobile navigation still closes after a route is selected.
+- Existing Bootstrap responsive offcanvas supplies the mobile backdrop and close behavior. At tablet/mobile sizes, a previously collapsed desktop sidebar expands to its full offcanvas width.
+
+### Known problems
+
+- The app currently has no light/dark theme switcher or dark theme implementation, so a separate dark application theme could not be checked. Sidebar colors are explicit and remain the same regardless of surrounding page colors.
+- Desktop/mobile appearance was not visually inspected in a browser; component tests, lint, and production build were run.
+
+### Next step
+
+- Sidebar styling step complete. Suggested commit: `style: improve ERP sidebar contrast and responsiveness`.
+
+## 2026-11-09 — Fix Bootstrap desktop sidebar background override
+
+### Files modified
+
+- `frontend/src/assets/styles.css` — moved sidebar colors into sidebar-scoped variables, set explicit expanded/collapsed flex widths, and overrode Bootstrap's desktop transparent background for `.offcanvas-lg.app-sidebar`. Matched the requested navigation, icon, active, hover, heading, separator, and brand colors.
+- `docs/PROGRESS.md` — recorded the actual cascade cause, browser check, and verification.
+
+### Root cause found
+
+- Bootstrap 5.3 applies `background-color: transparent !important` to `.offcanvas-lg` above 992px. The previous `.app-sidebar` background used a normal declaration with equal selector specificity, so Bootstrap's important rule won and the white brand/navigation text appeared on the light page background.
+- The sidebar background now has a single, scoped `!important` override on `.app-sidebar.offcanvas-lg` at desktop widths. The rest of the palette uses sidebar-local variables and normal scoped selectors; no global theme colors were changed.
+- Bootstrap also provides transparent background on the offcanvas body at desktop. The now-dark parent panel shows through it as intended.
+
+### Commands and visual checks
+
+- Microsoft Edge headless local preview, actual `Sidebar` component: expanded desktop at `1440x900`, collapsed desktop at `1440x900`, and mobile at `375x812`. Captures were inspected, then the temporary preview files were removed.
+- `npm test` — `41` test files passed; `122` tests passed.
+- `npm run lint` — Oxlint completed without diagnostics.
+- `npm run build` — Vite transformed 981 modules and built successfully.
+- `git diff --check` — passed; existing temporary-directory access warnings and CRLF notices may appear on Windows.
+
+### Features completed
+
+- Expanded sidebar renders at 240px; collapsed desktop sidebar renders at 76px. Mobile retains the full 240px offcanvas width, even if the desktop collapsed state was active before resizing.
+- Branding, inactive navigation, icons, section headings, hover, and active states are visible with the requested high-contrast colors.
+- Navigation routes, permissions, expandable groups, mobile offcanvas behavior, and close-after-navigation remain unchanged.
+
+### Known problems
+
+- The app still has no separate dark theme toggle. Sidebar variables are local and fixed, so the panel remains readable against either surrounding page palette, but a full application dark theme cannot be tested here.
+- No screenshot was attached to the request; browser checks used a temporary local preview of the actual Sidebar component and were removed afterward.
+
+### Next step
+
+- Sidebar cascade fix is complete. Suggested commit: `fix: restore dark sidebar background over Bootstrap offcanvas`.

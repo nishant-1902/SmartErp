@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import DataTable from '../components/DataTable.jsx'
 import DashboardCard from '../components/DashboardCard.jsx'
 import DashboardWidget from '../components/DashboardWidget.jsx'
@@ -90,11 +91,43 @@ export default function Home() {
   ]
 
   const lowStockColumns = [
-    { key: 'sku', label: 'SKU' },
-    { key: 'name', label: 'Product' },
-    { key: 'category', label: 'Category' },
-    { key: 'available_quantity', label: 'Available' },
-    { key: 'min_stock_level', label: 'Minimum' },
+    {
+      key: 'name',
+      label: 'Product',
+      className: 'low-stock-product-cell',
+      render: (product) => <span className="low-stock-product-name" title={product.name}>{product.name}</span>,
+    },
+    {
+      key: 'sku',
+      label: 'SKU',
+      className: 'low-stock-sku-cell',
+      render: (product) => product.id
+        ? <Link to={`/products/${product.id}`}>{product.sku}</Link>
+        : product.sku,
+    },
+    {
+      key: 'available_quantity',
+      label: 'Available',
+      className: 'text-end low-stock-quantity-cell',
+    },
+    {
+      key: 'min_stock_level',
+      label: 'Minimum stock',
+      className: 'text-end low-stock-minimum-cell',
+    },
+    {
+      key: 'stock_status',
+      label: 'Status',
+      className: 'low-stock-status-cell',
+      render: (product) => {
+        const outOfStock = Number(product.available_quantity) <= 0
+        return (
+          <span className={`badge ${outOfStock ? 'low-stock-badge low-stock-badge--empty' : 'low-stock-badge low-stock-badge--warning'}`}>
+            {outOfStock ? 'Out of Stock' : 'Low Stock'}
+          </span>
+        )
+      },
+    },
   ]
 
   const availableMetrics = metrics.filter(
@@ -199,7 +232,7 @@ export default function Home() {
 
       {canReadInventory && (dashboard || error) && (
         <div className="row g-3 mb-3">
-          <div className="col-12 col-xl-6">
+          <div className="col-12">
             <DashboardWidget
               available={dashboard?.low_stock_products !== undefined}
               error={widgetError('low_stock_products')}
@@ -207,11 +240,17 @@ export default function Home() {
               onRetry={retry}
               title="Low-stock products"
             >
-              <div className="surface-card dashboard-chart p-3">
-                <h2 className="h6 mb-3">Low-stock products</h2>
+              <div className="surface-card dashboard-chart low-stock-dashboard-card p-3">
+                <div className="low-stock-dashboard-heading">
+                  <h2 className="h6 mb-0">Low-stock products</h2>
+                  <Link className="btn btn-outline-primary btn-sm" to="/inventory?low_stock=true">
+                    View all
+                  </Link>
+                </div>
                 <DataTable
+                  className="dashboard-low-stock-table"
                   columns={lowStockColumns}
-                  data={dashboard?.low_stock_products ?? []}
+                  data={(dashboard?.low_stock_products ?? []).slice(0, 6)}
                   emptyMessage="No active products are below their stock minimum."
                 />
               </div>

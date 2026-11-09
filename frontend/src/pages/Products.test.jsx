@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { BrowserRouter } from 'react-router-dom'
+import { BrowserRouter, MemoryRouter } from 'react-router-dom'
 import { ToastProvider } from '../context/ToastContext.jsx'
 import { useAuth } from '../hooks/useAuth.js'
 import {
@@ -51,6 +51,24 @@ beforeEach(() => {
 })
 
 describe('Products page', () => {
+  it('applies a category passed from a dashboard chart link', async () => {
+    render(
+      <MemoryRouter initialEntries={['/products?category=Furniture']}>
+        <ToastProvider>
+          <Products />
+        </ToastProvider>
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      expect(listProducts).toHaveBeenCalledWith(
+        expect.objectContaining({ category: 'Furniture' }),
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      )
+    })
+    expect(await screen.findByLabelText('Filter products by category')).toHaveValue('Furniture')
+  })
+
   it('shows product details and asks before deactivation', async () => {
     render(
       <BrowserRouter>

@@ -11,11 +11,12 @@ function getCellValue(row, column) {
 /**
  * Renders configurable, accessible table columns with sorting and empty/loading states.
  *
- * @param {{columns: Array<{key: string, label: string, sortable?: boolean, render?: (row: object) => React.ReactNode, sortValue?: (row: object) => string | number}>, data?: object[], loading?: boolean, emptyMessage?: string, onSort?: (key: string, direction: 'asc' | 'desc') => void}} props
+ * @param {{columns: Array<{key: string, label: string, sortable?: boolean, className?: string, render?: (row: object) => React.ReactNode, sortValue?: (row: object) => string | number}>, data?: object[], loading?: boolean, emptyMessage?: string, className?: string, onSort?: (key: string, direction: 'asc' | 'desc') => void}} props
  */
 export default function DataTable({
   columns,
   data = [],
+  className = '',
   loading = false,
   emptyMessage = 'No records to display.',
   onSort,
@@ -50,7 +51,7 @@ export default function DataTable({
   }
 
   return (
-    <div className="data-table-wrap table-responsive">
+    <div className={`data-table-wrap table-responsive ${className}`.trim()}>
       <Table hover responsive="sm" className="align-middle">
         <thead>
           <tr>
@@ -66,6 +67,7 @@ export default function DataTable({
                       : 'none'
                   }
                   key={column.key}
+                  className={column.className}
                   scope="col"
                 >
                   {column.sortable ? (
@@ -104,7 +106,7 @@ export default function DataTable({
             sortedData.map((row, index) => (
               <tr key={row.id ?? row._id ?? index}>
                 {columns.map((column) => (
-                  <td key={column.key}>
+                  <td className={column.className} key={column.key}>
                     {column.render ? column.render(row) : row[column.key]}
                   </td>
                 ))}

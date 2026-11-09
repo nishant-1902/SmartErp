@@ -1,5 +1,6 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { MemoryRouter } from 'react-router-dom'
 import Home from './Home.jsx'
 import { getDashboard } from '../services/reportsService.js'
 
@@ -35,6 +36,14 @@ vi.mock('recharts', () => {
     YAxis: Chart,
   }
 })
+
+function renderHome() {
+  return render(
+    <MemoryRouter>
+      <Home />
+    </MemoryRouter>,
+  )
+}
 
 const dashboard = {
   total_employees: 12,
@@ -101,7 +110,7 @@ afterEach(() => {
 
 describe('Home', () => {
   it('renders metrics, charts, low-stock rows, and recent transactions from the API', async () => {
-    render(<Home />)
+    renderHome()
 
     expect(await screen.findByText('Active employees')).toBeInTheDocument()
     expect(screen.getByText('12')).toBeInTheDocument()
@@ -116,6 +125,41 @@ describe('Home', () => {
     )
   })
 
+  it('lets a user toggle an inventory category from the chart legend', async () => {
+    renderHome()
+
+    const categoryToggle = await screen.findByRole('button', { name: 'Tools' })
+    expect(categoryToggle).toHaveAttribute('aria-pressed', 'true')
+
+    fireEvent.click(categoryToggle)
+    expect(categoryToggle).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('shows at most six low-stock products and links to filtered inventory', async () => {
+    getDashboard.mockResolvedValue({
+      ...dashboard,
+      low_stock_products: Array.from({ length: 8 }, (_, index) => ({
+        id: `product-${index}`,
+        sku: `SKU-${index}`,
+        name: `Product ${index}`,
+        available_quantity: index === 0 ? 0 : 1,
+        min_stock_level: 3,
+      })),
+    })
+
+    renderHome()
+
+    expect(await screen.findByText('Product 0')).toBeInTheDocument()
+    expect(screen.getByText('Product 5')).toBeInTheDocument()
+    expect(screen.queryByText('Product 6')).not.toBeInTheDocument()
+    expect(screen.getAllByText('Low Stock')).toHaveLength(5)
+    expect(screen.getByText('Out of Stock')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'View all' })).toHaveAttribute(
+      'href',
+      '/inventory?low_stock=true',
+    )
+  })
+
   it('shows only widgets allowed by the returned dashboard permissions', async () => {
     permissionSet.delete('sales:read')
     permissionSet.delete('purchase:read')
@@ -127,7 +171,7 @@ describe('Home', () => {
       low_stock_products: [],
     })
 
-    render(<Home />)
+    renderHome()
 
     expect(await screen.findByText('Active products')).toBeInTheDocument()
     expect(screen.queryByText('Monthly sales')).not.toBeInTheDocument()
@@ -142,7 +186,7 @@ describe('Home', () => {
         data: { error: { message: 'Dashboard unavailable.' } },
       },
     })
-    render(<Home />)
+    renderHome()
 
     expect(await screen.findAllByText('Dashboard unavailable.')).not.toHaveLength(0)
     expect(screen.getAllByRole('button', { name: 'Retry' }).length).toBeGreaterThan(1)
@@ -169,7 +213,7 @@ describe('Home', () => {
       },
     })
 
-    render(<Home />)
+    renderHome()
 
     expect(await screen.findByText('Active products')).toBeInTheDocument()
     expect(screen.queryByText('Wrench')).not.toBeInTheDocument()
