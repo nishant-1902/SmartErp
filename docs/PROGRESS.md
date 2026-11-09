@@ -2296,3 +2296,61 @@
 ### Next step
 
 - Review the documented scale limits and decide whether to add a supported cap/pagination policy for distinct filter values and monthly report ranges. Suggested commit: `perf: optimize indexed lists and reports`.
+
+## 2026-11-09 — Complete project documentation
+
+### Files created
+
+- `CONTRIBUTING.md` — contributor workflow and project architecture rules.
+- `CHANGELOG.md` — unreleased documentation milestone and pointer to historical progress.
+- `backend/scripts/dump_routes.py` — prints every Django URL resolver path, including included URLconfs.
+
+### Files modified
+
+- `README.md` — added technology stack, data-flow diagram, environment-variable table, deployment notes, screenshot placeholders, troubleshooting, and contribution/release links.
+- `docs/requirements.md` — changed stale planned-stack wording to describe the implemented stack and point to evidence gaps.
+- `docs/architecture.md` — corrected stale target-design wording and documented the current repository structure.
+- `docs/api-documentation.md` — added the resolver-generated inventory of all current backend paths.
+- `docs/user-manual.md` — replaced the TODO with instructions for current screens and all five manager/admin roles plus the Employee role.
+- `docs/maintenance.md` — added backup/restore, audit retention, user deactivation, dependency updates, monitoring, troubleshooting, security maintenance, and monthly checklist procedures.
+- `docs/PROGRESS.md` — recorded this work and observed verification.
+
+### Dependencies installed
+
+- None.
+
+### Commands run and observed
+
+- From `backend\`, `.\venv\Scripts\python.exe scripts\dump_routes.py` — printed 59 URL patterns from Django's resolver. The first direct script attempt failed because its directory was not on Python's import path; the script was corrected to add the backend root and then ran successfully.
+- `.\scripts\run-tests.ps1` in the sandbox — Django check passed and 383 tests passed, but one test errored because pytest could not enumerate the Windows temporary directory (`PermissionError`).
+- `.\scripts\run-tests.ps1` with `sandbox_permissions=require_escalated` — Django check passed; backend test pass 1: `384 passed in 7.34s`; backend coverage pass: `384 passed in 9.80s`, `92%` total coverage; frontend: `41` files and `116` tests passed; Oxlint completed without diagnostics; Vite transformed 981 modules and built successfully in 1.08s.
+- `git diff --check` — run; only a Git line-ending warning was shown for `docs/user-manual.md` (LF will be converted to CRLF by Git on Windows).
+- Route count check — `59` patterns.
+
+### Features completed
+
+- All requested documentation files now contain substantive content; `docs/user-manual.md` no longer has its placeholder.
+- Added route inventory generated from the actual Django resolver and usage instructions for regenerating it.
+- Added README environment/configuration, installation/running/testing/deployment, screenshots placeholder list, and troubleshooting guidance.
+- Added per-role workflows matching the current frontend route map and maintenance procedures for the requested operational topics.
+
+### Tests passed
+
+- Django system check.
+- Backend: `384 passed` on both normal and coverage runs; coverage `92%`.
+- Frontend: `41` test files and `116` tests passed.
+- Frontend lint (Oxlint).
+- Frontend production build.
+- Route dump script (59 routes).
+
+### Known problems and code/documentation mismatches
+
+- Documentation review found stale planning language in the architecture and requirements pages; corrected it.
+- `docs/requirements.md` is a confirmed requirements baseline and still labels some behavior as requirements rather than verified delivery. In particular, real MongoDB replica-set transaction isolation and production email delivery are not established by the standard fake-backed tests; configuration/live verification remains outstanding.
+- The user manual describes role-level flows, but exact control visibility varies with record status and permission checks; live production UI/browser behavior was not verified in this documentation step.
+- The first unprivileged test run failed due to pytest temp-directory access restrictions. The approved run outside the sandbox passed. No dependencies were installed.
+- No screenshots were available; README and manual list screenshot placeholders.
+
+### Next step
+
+- Documentation step complete. Stop here as requested. Suggested commit: `docs: complete SmartERP project documentation`.

@@ -15,6 +15,31 @@ backend.
   invoices, and returns.
 - Role-filtered dashboard and reports with date filters and safe CSV export.
 
+## Technology stack
+
+| Area | Technology |
+| --- | --- |
+| Web UI | React, React Router, Vite, Bootstrap, Axios |
+| API | Python, Django, Django REST Framework |
+| Database access | PyMongo only; MongoDB replica set for transactions |
+| Authentication | PyJWT access tokens, rotated HttpOnly refresh cookie, Django password hashers |
+| Frontend checks | Vitest, Testing Library, Oxlint, Vite production build |
+| Backend checks | pytest, pytest-django, pytest-cov |
+
+## Data flow
+
+```text
+User -> React screen -> Axios (JSON + bearer access token + refresh cookie)
+     -> Django URL/view -> serializer validation -> permission check
+     -> service business rules -> repository PyMongo operation -> MongoDB
+     <- serialized response envelope <- service <- API <- React screen
+```
+
+The frontend is not an authorization boundary. Django's ORM, migrations,
+`django.contrib.auth` data models, and Django admin are not used. All MongoDB
+reads and writes belong in each app's repository; business workflows belong in
+services. Stock changes also create stock movement records.
+
 ## Architecture
 
 ```text
@@ -111,6 +136,74 @@ Or run all backend and frontend checks from the repository root:
 ```powershell
 .\scripts\run-tests.ps1
 ```
+
+## Environment variables
+
+Copy `backend/.env.example` and `frontend/.env.example`; replace placeholders
+with your own settings. Keep `.env` files out of version control. `VITE_*`
+settings are embedded in browser JavaScript and are public.
+
+| Variable | Used by | Purpose |
+| --- | --- | --- |
+| `SMARTERP_ENV`, `DEBUG`, `ALLOWED_HOSTS` | Backend | Runtime mode and Django host/debug settings |
+| `SECRET_KEY` | Backend | Django framework signing; use a strong private value |
+| `MONGO_URI`, `MONGO_DB_NAME` | Backend | Application replica-set connection and database |
+| `MONGO_TEST_URI`, `MONGO_TEST_DB_NAME` | Backend tests | Optional isolated test database; never point this at production |
+| `JWT_SECRET_KEY`, `JWT_ISSUER`, `JWT_AUDIENCE` | Backend | JWT signing and claim validation |
+| `JWT_ACCESS_TOKEN_LIFETIME_SECONDS`, `JWT_REFRESH_TOKEN_LIFETIME_SECONDS` | Backend | Token lifetimes |
+| `CORS_ALLOWED_ORIGINS` | Backend | Exact browser origins permitted to call the API |
+| `REFRESH_COOKIE_NAME`, `REFRESH_COOKIE_SECURE`, `REFRESH_COOKIE_HTTPONLY`, `REFRESH_COOKIE_SAMESITE`, `REFRESH_COOKIE_PATH`, `REFRESH_COOKIE_DOMAIN` | Backend | Refresh-cookie policy; Secure must be enabled over HTTPS |
+| `SECURE_SSL_REDIRECT`, `SECURE_HSTS_SECONDS`, `TRUST_X_FORWARDED_PROTO` | Backend | Production HTTPS/proxy behavior; trust proxy headers only behind a configured trusted proxy |
+| `LOG_FILE`, `LOG_LEVEL`, `LOG_MAX_BYTES`, `LOG_BACKUP_COUNT` | Backend | Rotating application log destination and policy |
+| `VITE_API_BASE_URL` | Frontend | API base URL, normally `http://localhost:8000/api` locally |
+
+See the example files for the exact supported defaults and production settings.
+
+## Deployment
+
+Build the frontend with the production API URL set before `npm run build`; serve
+`frontend/dist` from static hosting with an SPA fallback. Run Django behind a
+TLS-terminating proxy, use HTTPS, set explicit hosts/origins and strong secrets,
+and connect only to a restricted MongoDB replica set. Initialize collections
+and indexes with `python manage.py init_db` before deployment. Follow
+[docs/deployment.md](docs/deployment.md) for platform and operations details.
+
+## Screenshots
+
+No screenshots are committed yet. Add current, redacted screenshots here when
+captured; never include customer records, credentials, or tokens.
+
+- `docs/screenshots/login.png` — login
+- `docs/screenshots/dashboard.png` — role-filtered dashboard
+- `docs/screenshots/inventory.png` — inventory and stock movements
+- `docs/screenshots/purchase-orders.png` — purchase workflow
+- `docs/screenshots/sales-orders.png` — sales workflow
+- `docs/screenshots/reports.png` — reports
+
+## Troubleshooting
+
+- **MongoDB connection or transaction error:** confirm the Windows service is
+  running, the URI credentials are URL-encoded, and `rs.status()` shows a
+  PRIMARY member. Transactions require a replica set; see
+  [docs/mongodb-local-setup.md](docs/mongodb-local-setup.md).
+- **401 after a period idle:** the access token expires; refresh the page or
+  sign in again. Confirm browser credentials are allowed for the exact CORS
+  origin and refresh-cookie path.
+- **403 on a screen or API call:** the signed-in role may lack the required
+  permission. Check backend permission rules; hiding a link does not grant
+  access.
+- **Frontend cannot reach the API:** check `VITE_API_BASE_URL`, backend port
+  8000, and `CORS_ALLOWED_ORIGINS`; restart Vite after changing `.env`.
+- **Route returns 404 or 400:** compare the path with the API reference and
+  route inventory; detail identifiers must be valid MongoDB ObjectIds.
+- **Tests fail locally:** activate the backend venv, install
+  `backend/requirements-dev.txt`, run `npm ci` under `frontend`, and inspect
+  the first failing assertion before changing fixtures.
+
+## Contribution and release notes
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the change workflow and
+[CHANGELOG.md](CHANGELOG.md) for documented releases and current work.
 
 ## Production settings and servers
 

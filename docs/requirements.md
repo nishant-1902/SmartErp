@@ -4,7 +4,7 @@
 
 This document turns the project brief into a testable requirements baseline. The brief does not explicitly assign letters A–J to its modules; the ten domains below are a clear grouping of the capabilities described in the brief. The owner confirmed the role permissions and workflow rules in this baseline on 2026-10-28.
 
-The application is planned as a React (JavaScript) frontend and a Django REST Framework JSON API backed by MongoDB through PyMongo only. Django ORM, migrations, admin, and Django auth data models are not used for application data.
+The implemented stack is a React (JavaScript) frontend and a Django REST Framework JSON API backed by MongoDB through PyMongo only. Django ORM, migrations, admin, and Django auth data models are not used for application data. This is the requirements baseline; individual acceptance items still require the evidence recorded in `docs/PROGRESS.md` (for example live replica-set transaction and production email-provider verification).
 
 ## Functional requirements by module (A–J)
 

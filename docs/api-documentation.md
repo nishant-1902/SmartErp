@@ -1,5 +1,83 @@
 # API Documentation
 
+## Resolver-verified route inventory
+
+The following paths were dumped from Django's live URL resolver using
+`backend/scripts/dump_routes.py` on 2026-11-09. This inventory is the source
+check for route coverage; endpoint sections below describe methods, access,
+parameters, and response behavior. Dynamic `<str:..._id>` segments are validated
+as MongoDB ObjectIds by the relevant endpoint. Fixed paths (including `me/`,
+`low-stock/`, `categories/`, and `designations/`) precede detail routes.
+
+```text
+api/health/
+api/auth/login/
+api/auth/refresh/
+api/auth/logout/
+api/auth/me/
+api/auth/change-password/
+api/auth/password-reset/request/
+api/auth/password-reset/confirm/
+api/users/
+api/users/<str:user_id>/activate/
+api/users/<str:user_id>/deactivate/
+api/users/<str:user_id>/reset-password/
+api/users/<str:user_id>/
+api/audit-logs/
+api/departments/
+api/departments/<str:department_id>/employees/
+api/departments/<str:department_id>/
+api/employees/
+api/employees/me/
+api/employees/designations/
+api/employees/<str:employee_id>/
+api/customers/
+api/customers/<str:customer_id>/sales-orders/
+api/customers/<str:customer_id>/
+api/sales-orders/
+api/sales-orders/<str:sales_order_id>/confirm/
+api/sales-orders/<str:sales_order_id>/cancel/
+api/sales-orders/<str:sales_order_id>/fulfill/
+api/sales-orders/<str:sales_order_id>/payments/
+api/sales-orders/<str:sales_order_id>/returns/
+api/sales-orders/<str:sales_order_id>/
+api/payments/
+api/invoices/
+api/invoices/<str:invoice_id>/
+api/suppliers/
+api/suppliers/<str:supplier_id>/purchase-orders/
+api/suppliers/<str:supplier_id>/
+api/products/
+api/products/low-stock/
+api/products/categories/
+api/products/<str:product_id>/
+api/purchase-orders/
+api/purchase-orders/<str:purchase_order_id>/submit/
+api/purchase-orders/<str:purchase_order_id>/approve/
+api/purchase-orders/<str:purchase_order_id>/reject/
+api/purchase-orders/<str:purchase_order_id>/cancel/
+api/purchase-orders/<str:purchase_order_id>/receive/
+api/purchase-orders/<str:purchase_order_id>/
+api/stock-adjustments/
+api/stock-movements/
+api/reports/dashboard/
+api/reports/sales/
+api/reports/inventory/
+api/reports/low-stock/
+api/reports/employees/
+api/reports/departments/
+api/reports/suppliers/
+api/reports/purchases/
+api/reports/monthly-sales/
+```
+
+Regenerate and compare this list after any URL change:
+
+```powershell
+Set-Location backend
+.\venv\Scripts\python.exe scripts\dump_routes.py
+```
+
 Base URL: `http://localhost:8000/api`
 
 All department endpoints require a bearer access token and use the standard JSON

@@ -2,7 +2,7 @@
 
 ## Status and scope
 
-This is the recommended target architecture for SmartERP, based on `docs/PROJECT_BRIEF.md` and the rules in `AGENTS.md`. It documents a design; it does not mean the backend, frontend, database, or integrations have been implemented.
+This document describes the implemented SmartERP architecture and its intended boundaries. It is checked against the current backend and frontend source. Individual limits and unverified production behavior are called out where relevant; see `docs/PROGRESS.md` for current verification status.
 
 ## Final recommendation
 
@@ -93,9 +93,11 @@ Error responses follow:
 - **Secrets and operations:** use environment variables or a suitable secret store; keep real `.env` files and MongoDB key files outside version control; redact secrets in logs; back up data and test restoration.
 - **Response and observability boundary:** expose stable error codes and safe messages, not raw database errors or stack traces. Keep detailed diagnostic logs server-side with access controls.
 
-## Target folder structure
+## Project folder structure
 
-This is the planned structure for the full project, not a claim that these directories or files exist yet. It reflects the modules and documentation in the project brief; later steps should create only the areas needed for that step.
+The structure below describes the repository organization for the current
+implementation. It is a focused architecture map rather than a complete file
+listing; consult the repository for the full inventory.
 
 ```text
 smarterp/

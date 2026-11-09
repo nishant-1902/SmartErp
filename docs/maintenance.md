@@ -1,5 +1,102 @@
 # Maintenance and performance
 
+## Operations runbook
+
+These procedures are operator guidance; backup scheduling, alert delivery, and
+audit retention must be configured in the hosting environment. Do not treat
+documentation as proof that a production job is active.
+
+### Backup and restore
+
+1. Schedule encrypted, access-controlled MongoDB replica-set backups using the
+   hosting provider's supported snapshot or `mongodump` process. Keep backups
+   outside the database host and record retention and recovery objectives.
+2. For a logical backup, use a least-privilege backup account and a protected
+   destination. Example for a local replica set:
+
+   ```powershell
+   mongodump --uri "$env:BACKUP_MONGO_URI" --db smarterp --out "D:\backups\smarterp"
+   ```
+
+3. Restore into an isolated recovery database/cluster first; verify collections,
+   indexes, validators, and a sample of business records. Example:
+
+   ```powershell
+   mongorestore --uri "$env:RESTORE_MONGO_URI" --nsFrom="smarterp.*" --nsTo="smarterp_recovery.*" "D:\backups\smarterp\smarterp"
+   ```
+
+4. Test application connectivity and critical read workflows against recovery.
+   A restore into production requires an approved maintenance window and a
+   separate, reviewed operational procedure. Protect URI values as secrets.
+
+### Audit-log retention
+
+Audit events are stored in MongoDB and indexed for time-ordered review. No
+automatic retention/deletion policy is implemented by the app. Set a retention
+period with the data owner and legal requirements, export records needed for
+investigation, then use a reviewed and backed-up purge job if required. Never
+purge audit records merely to control collection size without authorization.
+
+### User deactivation
+
+Use the **Users** screen or the user activation/deactivation API; do not delete
+the user document manually. Deactivation prevents further authentication while
+preserving employee, order, and audit references. Check that the action does
+not target the acting administrator or the last active Super Admin. Review
+active sessions/token version and verify access is denied after deactivation.
+
+### Dependency updates
+
+Review Python pins in `backend/requirements*.txt` and JavaScript ranges/lockfile
+in `frontend/package.json` and `frontend/package-lock.json`. Update in a focused
+branch, inspect security advisories and changelogs, regenerate lockfiles with
+the supported package manager, run the complete backend/frontend checks, and
+review the production build. Do not merge a major-version update solely because
+the resolver selected it. Record advisories that cannot yet be fixed.
+
+### Monitoring and troubleshooting
+
+- Monitor API availability using `GET /api/health/`; this is a liveness
+  endpoint and does not prove MongoDB transaction readiness.
+- Collect application logs from the configured rotating log file and platform
+  logs. Restrict access and redact credentials, tokens, personal data, and
+  connection strings.
+- Alert on repeated 5xx responses, authentication failures, MongoDB connection
+  or transaction errors, disk/log exhaustion, replica-set health, and backup
+  failures. Configure alert thresholds in the hosting/monitoring platform.
+- For failed writes, correlate the timestamp and request/audit context, inspect
+  sanitized server logs, verify replica-set PRIMARY state and indexes, then
+  reproduce in a dedicated test environment. Do not retry stock or payment
+  operations blindly; check idempotency/status first.
+- For UI/API errors, verify API base URL, CORS origin, HTTPS/cookie settings,
+  current role, request validation, and route inventory before changing data.
+
+### Security maintenance
+
+- Rotate Django and JWT secrets using a planned coordinated change; JWT secret
+  rotation invalidates signed tokens and requires users to sign in again.
+- Review privileged users, active accounts, CORS origins, database network
+  access, service identities, TLS certificates, and log permissions monthly.
+- Keep production `DEBUG=False`, explicit `ALLOWED_HOSTS`, HTTPS, secure
+  refresh cookies, and private MongoDB access. Review proxy trust settings.
+- Review dependency advisories, password reset flow, audit coverage, access
+  failures, and secrets scanning. Never copy production secrets into tests or
+  issue reports.
+
+### Monthly checklist
+
+- [ ] Confirm a recent backup completed and a restore drill remains current.
+- [ ] Review MongoDB replica-set health, disk capacity, and index growth.
+- [ ] Check API health/errors, authentication failures, and application logs.
+- [ ] Review Super Admin and other privileged accounts; deactivate leavers.
+- [ ] Review access-control changes and audit-log retention needs.
+- [ ] Check Python/npm advisories and apply approved dependency updates.
+- [ ] Verify HTTPS, certificates, CORS origins, secrets handling, and security
+      configuration.
+- [ ] Review query/index metrics and investigate slow lists/reports.
+- [ ] Run the supported test/build checks for the deployed revision and record
+      outstanding issues and the next maintenance action.
+
 ## Index management
 
 SmartERP accesses MongoDB through PyMongo repositories. Indexes are declared in
