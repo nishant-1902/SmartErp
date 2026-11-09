@@ -2354,3 +2354,50 @@
 ### Next step
 
 - Documentation step complete. Stop here as requested. Suggested commit: `docs: complete SmartERP project documentation`.
+
+## 2026-11-09 — Prepare portfolio material
+
+### Files created
+
+- `docs/portfolio.md` — exactly 150-word project summary, five evidence-based resume bullets, architecture talking points, a timed demo outline, 25 model interview answers, known limitations/future work, and a GitHub profile README snippet.
+
+### Files modified
+
+- `docs/PROGRESS.md` — recorded this portfolio step and actual command results.
+
+### Dependencies installed
+
+- None.
+
+### Commands run and observed
+
+- Read `AGENTS.md` and the latest `docs/PROGRESS.md` entry before editing.
+- `.\backend\venv\Scripts\python.exe .\backend\scripts\dump_routes.py | Measure-Object -Line` — `59` URL patterns.
+- Portfolio summary word count — `150`.
+- `.\scripts\run-tests.ps1` with the approved outside-sandbox execution — Django check passed; backend normal run `384 passed in 7.24s`; coverage run `384 passed in 10.24s`, `92%` coverage; frontend `41` files and `116` tests passed. The script then stopped at Oxlint because Windows Application Control blocked its native `.node` binding.
+- `npm run build` inside sandbox — failed with Vite config bundler `spawn EPERM`; rerun with approved outside-sandbox execution — Vite transformed 981 modules and built successfully in 688ms.
+- `git diff --check` — passed with no output.
+
+### Features completed
+
+- Created portfolio content using measured repository facts: 59 route patterns, 384 backend tests, 116 frontend tests, 92% backend coverage, and the documented synthetic benchmark sizes.
+- Marked the sales-return idempotency gap and the lack of live replica-set transaction verification as limitations rather than overstating implementation.
+- Prepared a demo flow using current frontend screens and concise interview answers grounded in the code/docs.
+
+### Tests passed
+
+- Django system check.
+- Backend tests: 384 passed; coverage run: 384 passed, 92% coverage.
+- Frontend tests: 41 files and 116 tests passed.
+- Frontend production build: passed when run outside the sandbox.
+- Route dump: 59 patterns; summary word count: 150; `git diff --check`: passed.
+
+### Known problems
+
+- Oxlint did not run: Windows Application Control blocked `oxlint.win32-x64-msvc.node`. No dependency reinstall was attempted.
+- The unprivileged Vite build was blocked by sandbox `spawn EPERM`; the approved run outside the sandbox succeeded.
+- Portfolio implementation claims retain the known limitation that normal automated tests use fakes and do not prove live MongoDB transaction isolation. Sales returns still lack idempotency, and production email delivery is not configured.
+
+### Next step
+
+- Portfolio material is complete. Stop here as requested. Suggested commit: `docs: add SmartERP portfolio material`.
